@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.2';
+const IE_VERSION = '0.1.3';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -311,9 +311,32 @@ class IngredientExtractorCard extends HTMLElement {
   }
 }
 
-if (!customElements.get('ingredient-extractor-card')) {
-  customElements.define('ingredient-extractor-card', IngredientExtractorCard);
+const IE_TAG = 'ingredient-extractor-card';
+
+/* Register with whatever registry window.customElements currently is. Returns true once
+ * that registry knows the card. */
+function ieRegister() {
+  const registry = window.customElements;
+  if (registry.get(IE_TAG)) return true;
+  try {
+    registry.define(IE_TAG, IngredientExtractorCard);
+  } catch (e) {
+    /* already defined natively; nothing more this registry can do */
+  }
+  return !!registry.get(IE_TAG);
 }
+
+ieRegister();
+// Some dashboard cards load a scoped-custom-element-registry polyfill that replaces
+// window.customElements with a fresh, empty registry. If that happens after this script
+// ran, Lovelace can no longer find the card and shows "Configuration error". Re-register
+// with the replacement for the first minute; Lovelace rebuilds the card once it appears.
+let ieChecks = 0;
+const ieWatch = setInterval(() => {
+  if (++ieChecks >= 60) clearInterval(ieWatch);
+  else ieRegister();
+}, 1000);
+
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === 'ingredient-extractor-card')) {
   window.customCards.push({
