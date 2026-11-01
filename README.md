@@ -34,9 +34,10 @@ It is a custom integration plus a dashboard card in one HACS package. The card i
    type: custom:ingredient-extractor-card
    title: Recipe to shopping list   # optional
    camera: auto                     # optional: auto (default), true or false
+   android_camera: viewfinder       # optional: viewfinder (default) or native
    ```
 
-On a phone or tablet the card shows **Take photo** and **Choose photo** (your photo library). On iPhone, Take photo opens the native camera; on Android, where the Companion app always opens the media picker, it opens a live viewfinder in the card instead (allow camera access when asked); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout.
+On a phone or tablet the card shows **Take photo** and **Choose photo** (your photo library). On iPhone, Take photo opens the native camera; on Android, where the Companion app always opens the media picker, it opens a live viewfinder in the card instead (allow camera access when asked); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout. Once your Android Companion app opens the camera from web pages (support was merged in October 2026 and is not in release 2026.10.1), set `android_camera: native` to use the phone's own camera app instead of the viewfinder.
 
 > If the card isn't found right after installing, hard-refresh the browser (or clear the Companion app's frontend cache) so the newly registered card script loads.
 

@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.8';
+const IE_VERSION = '0.1.9';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -175,7 +175,12 @@ class IngredientExtractorCard extends HTMLElement {
     if (config && config.camera != null && ![true, false, 'auto'].includes(config.camera)) {
       throw new Error('"camera" must be true, false or auto');
     }
-    this._config = { title: 'Recipe to shopping list', camera: 'auto', ...(config || {}) };
+    if (config && config.android_camera != null && !['viewfinder', 'native'].includes(config.android_camera)) {
+      throw new Error('"android_camera" must be viewfinder or native');
+    }
+    this._config = {
+      title: 'Recipe to shopping list', camera: 'auto', android_camera: 'viewfinder', ...(config || {}),
+    };
     this._setState('idle');
   }
 
@@ -191,6 +196,9 @@ class IngredientExtractorCard extends HTMLElement {
    * always opens the media picker, so there the card runs its own viewfinder. iOS
    * honours `capture` and opens the native camera, which is the better experience. */
   _useLiveCamera() {
+    // `android_camera: native` is for Companion app releases that honour `capture`
+    // (support was merged in October 2026, after the 2026.10.1 release).
+    if (this._config.android_camera === 'native') return false;
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
       && /Android/i.test(navigator.userAgent);
   }
