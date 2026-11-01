@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.5';
+const IE_VERSION = '0.1.6';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -77,7 +77,7 @@ const IE_STYLE = `
   }
   /* Live viewfinder (Android, where the app ignores the file input's capture hint). */
   .viewfinder video {
-    display: block; width: 100%; max-height: 60vh; object-fit: contain;
+    display: block; width: 100%; max-height: 45vh; object-fit: contain;
     background: #000; border-radius: var(--ha-card-border-radius, 12px);
   }
   .viewfinder .actions { display: flex; gap: 8px; }
@@ -208,6 +208,8 @@ class IngredientExtractorCard extends HTMLElement {
   async _startCamera() {
     if (this._busy) return;
     this._setState('camera');
+    // Keep Capture/Cancel on screen; floating nav bars can cover the bottom of the view.
+    this.scrollIntoView({ block: 'start', behavior: 'smooth' });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,

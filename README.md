@@ -73,6 +73,8 @@ With Claude Haiku 5.5 one photo is roughly 2,800 input and 500 output tokens —
 | The AI provider rejected the API key | Use **Reconfigure** to enter a valid key. |
 | That image format isn't supported | The browser couldn't convert the photo. Export it as JPEG or PNG. |
 | The AI took too long to respond | The provider timed out (45 s). Try again. |
+| "Configuration error" right after Home Assistant restarts | The page loaded before the integration finished starting, so the card script wasn't included. Refresh the page (in the Companion app: Settings → Companion app → Debugging → Reset frontend cache). |
+| Take photo opens the photo picker | On Android the card uses its own viewfinder; allow camera access for the Home Assistant app when asked. |
 
 Debug logging:
 
