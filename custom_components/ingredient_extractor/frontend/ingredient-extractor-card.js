@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.2.0';
+const IE_VERSION = '0.3.0';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -89,7 +89,7 @@ const IE_STYLE = `
     position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 8px;
   }
   .viewfinder .actions button { flex: 1; margin-top: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
-  /* Recipe-link row: input + paste + add. */
+  /* Recipe-link row: input + add. */
   .linkrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
   .linkrow input {
     flex: 1; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 0 12px;
@@ -107,8 +107,77 @@ const IE_STYLE = `
   .linkrow button:disabled { opacity: .45; cursor: default; }
   .linkrow button:focus-visible { outline: 2px solid var(--primary-text-color); outline-offset: 2px; }
   .linkrow ha-icon { --mdc-icon-size: 22px; }
-  .hint { margin: 6px 0 0; font-size: .875rem; color: var(--secondary-text-color); }
   .status .sub { font-size: .875rem; color: var(--secondary-text-color); overflow-wrap: anywhere; }
+`;
+
+/* Styles for the in-card spacer shown in `fab` layout (the card itself is invisible). */
+const IE_SPACER_STYLE = `
+  :host { display: block; }
+  .spacer { height: 80px; }
+`;
+
+/* Styles for the portalled floating button + bottom sheet (`fab` layout). They are added
+ * to IE_STYLE inside the portal's own shadow root, so the card's tiles, link row,
+ * viewfinder, status and error styles are reused as they are. */
+const IE_FAB_STYLE = `
+  :host { font-family: var(--ha-font-family-body, var(--primary-font-family, Roboto, sans-serif)); }
+  [hidden] { display: none !important; }
+  .fab {
+    position: fixed; z-index: 50; box-sizing: border-box; height: 56px; padding: 0 22px 0 16px;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(var(--ie-fab-bottom, 108px) + env(safe-area-inset-bottom, 0px));
+    display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 28px;
+    font: inherit; font-size: 1rem; font-weight: 500; cursor: pointer;
+    color: var(--text-primary-color, #fff); background: var(--primary-color, #03a9f4);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  }
+  .fab ha-icon { --mdc-icon-size: 24px; }
+  .fab:focus-visible { outline: 2px solid var(--primary-text-color); outline-offset: 3px; }
+  .layer {
+    position: fixed; inset: 0; z-index: 1000; display: flex;
+    align-items: flex-end; justify-content: center;
+  }
+  .backdrop {
+    position: absolute; inset: 0; background: rgba(0, 0, 0, .6); touch-action: none;
+    animation: ie-fade .2s ease-out;
+  }
+  .sheet {
+    position: relative; box-sizing: border-box; width: 100%; max-width: 560px;
+    max-height: 90vh; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom, 0px); outline: none;
+    color: var(--primary-text-color); background: var(--card-background-color, #1d1d1d);
+    border-radius: 24px 24px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, .4);
+    animation: ie-up .24s cubic-bezier(.2, .8, .2, 1);
+  }
+  @keyframes ie-up { from { transform: translateY(100%); } }
+  @keyframes ie-fade { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .sheet, .backdrop { animation: none; } }
+  .handle {
+    display: flex; align-items: center; justify-content: center; width: 100%; height: 44px;
+    padding: 0; border: 0; background: none; cursor: pointer;
+  }
+  .handle .bar { width: 40px; height: 4px; border-radius: 2px; background: var(--secondary-text-color, #9b9b9b); opacity: .5; }
+  .handle:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -4px; border-radius: 12px; }
+  .sheet h2 { margin: 0 16px 12px; font-size: 1.25rem; font-weight: 500; }
+  .sheet .tiles.one { grid-template-columns: 1fr; }
+  .sheet .tiles .dropzone,
+  .sheet .tiles .dropzone:hover,
+  .sheet .tiles .dropzone:focus-within {
+    min-height: 96px; padding: 12px 8px; border: 0; border-radius: 16px;
+    color: var(--primary-text-color);
+    background: rgba(138, 180, 248, .15);
+    background: color-mix(in srgb, var(--primary-color, #8ab4f8) 16%, transparent);
+  }
+  .sheet .tiles .dropzone:hover, .sheet .tiles .dropzone.drag {
+    background: rgba(138, 180, 248, .25);
+    background: color-mix(in srgb, var(--primary-color, #8ab4f8) 26%, transparent);
+  }
+  .sheet .tiles .dropzone ha-icon { --mdc-icon-size: 32px; }
+  .sheet .linkrow { margin-top: 16px; }
+  .sheet .linkrow input { min-height: 48px; padding: 0 18px; border-radius: 24px; }
+  .sheet .linkrow button { width: 48px; height: 48px; }
+  .sheet .viewfinder video { max-height: 50vh; }
+  .tip { margin: 12px 4px 0; font-size: .8125rem; line-height: 1.4; color: var(--secondary-text-color); }
 `;
 
 /* First http(s) URL in free text (share text often reads "Recipe name https://..."),
@@ -217,16 +286,37 @@ class IngredientExtractorCard extends HTMLElement {
     if (config && config.android_camera != null && !['viewfinder', 'native'].includes(config.android_camera)) {
       throw new Error('"android_camera" must be viewfinder or native');
     }
+    if (config && config.layout != null && !['inline', 'fab'].includes(config.layout)) {
+      throw new Error('"layout" must be inline or fab');
+    }
+    if (config && config.fab_label != null && (typeof config.fab_label !== 'string' || !config.fab_label.trim())) {
+      throw new Error('"fab_label" must be a non-empty string');
+    }
+    if (config && config.fab_bottom != null && (typeof config.fab_bottom !== 'string'
+        || (window.CSS && CSS.supports && !CSS.supports('bottom', config.fab_bottom)))) {
+      throw new Error('"fab_bottom" must be a CSS length, e.g. 108px');
+    }
+    this._teardownPortal();
     this._config = {
       title: 'Recipe to shopping list', camera: 'auto', android_camera: 'viewfinder', ...(config || {}),
     };
+    this._config.layout = (config && config.layout) || 'inline';
+    this._config.fab_label = (config && config.fab_label) || 'Recipe';
+    this._config.fab_bottom = (config && config.fab_bottom) || '108px';
     this._setState('idle');
+    if (this.isConnected) this._buildPortal();
   }
+
+  _fab() { return !!this._config && this._config.layout === 'fab'; }
+
+  /* Where state views render: the portal in fab layout, the card's own shadow root otherwise. */
+  _stage() { return this._fab() && this._portalRoot ? this._portalRoot : this.shadowRoot; }
 
   /* Camera tile: forced by config, otherwise only on touch-first devices, where
    * `capture` opens the camera. Desktop browsers ignore `capture`. */
   _showCamera() {
     const { camera } = this._config;
+    if (this._fab()) return camera !== false; // phones are the target: both tiles unless disabled
     if (camera !== 'auto') return camera;
     return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   }
@@ -245,13 +335,136 @@ class IngredientExtractorCard extends HTMLElement {
   // Store only; re-rendering on every hass update would wipe the current state.
   set hass(hass) { this._hass = hass; }
 
-  getCardSize() { return 3; }
-  getGridOptions() { return { columns: 12, min_rows: 2 }; }
+  getCardSize() { return this._fab() ? 1 : 3; }
+  getGridOptions() { return this._fab() ? { columns: 12, min_rows: 1 } : { columns: 12, min_rows: 2 }; }
   static getStubConfig() { return {}; }
+
+  connectedCallback() {
+    if (this._config && this._fab()) this._buildPortal();
+  }
 
   disconnectedCallback() {
     this._revokeThumb();
     this._stopCamera();
+    this._teardownPortal(); // HA disconnects cards on view change, so the FAB only shows here
+  }
+
+  /* ---------- floating button + bottom sheet (fab layout) ----------
+   * Both live in a host element on document.body with its own shadow root, not inside
+   * the card: an ancestor with transform/filter/contain (card-mod, view layouts) would
+   * turn position:fixed into position:relative-to-that-ancestor. */
+
+  _buildPortal() {
+    if (this._portal || !this._fab()) return;
+    // Drop orphans left by cards that were replaced without a disconnect.
+    document.querySelectorAll('[data-ie-portal]').forEach((h) => {
+      if (h._ieOwner !== this && !(h._ieOwner && h._ieOwner.isConnected)) h.remove();
+    });
+    const host = document.createElement('div');
+    host.setAttribute('data-ie-portal', '');
+    host._ieOwner = this;
+    const root = host.attachShadow({ mode: 'open' });
+
+    const fab = el('button', { class: 'fab', type: 'button', 'aria-haspopup': 'dialog' }, [
+      el('ha-icon', { icon: 'mdi:plus' }), el('span', { text: this._config.fab_label }),
+    ]);
+    fab.style.setProperty('--ie-fab-bottom', this._config.fab_bottom);
+    fab.addEventListener('click', () => this._openSheet());
+
+    const handle = el('button', { class: 'handle', type: 'button', 'aria-label': 'Close' },
+      [el('span', { class: 'bar' })]);
+    handle.addEventListener('click', () => this._closeSheet());
+    const body = el('div', { class: 'body' });
+    const sheet = el('div', {
+      class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ie-title', tabindex: '-1',
+    }, [handle, el('h2', { id: 'ie-title', text: 'Add a recipe' }), body]);
+    const backdrop = el('div', { class: 'backdrop' });
+    backdrop.addEventListener('click', () => this._closeSheet());
+    const layer = el('div', { class: 'layer' }, [backdrop, sheet]);
+    layer.hidden = true;
+
+    root.append(el('style', { text: IE_STYLE + IE_FAB_STYLE }), fab, layer);
+    document.body.appendChild(host);
+    this._portal = host;
+    this._portalRoot = root;
+    this._fabBtn = fab;
+    this._layer = layer;
+    this._sheet = sheet;
+    this._sheetBody = body;
+    this._open = false;
+    this._render();
+  }
+
+  _teardownPortal() {
+    if (this._open) this._unlockOpen();
+    this._stopCamera();
+    if (this._portal) this._portal.remove();
+    this._portal = this._portalRoot = this._fabBtn = this._layer = this._sheet = this._sheetBody = null;
+    this._open = false;
+    if (this._state !== 'working') this._state = 'idle'; // don't resurrect a stale sheet view
+  }
+
+  _openSheet() {
+    if (this._open || !this._portal) return;
+    this._open = true;
+    if (this._state !== 'idle') this._setState('idle');
+    this._layer.hidden = false;
+    this._prevOverflow = [document.body.style.overflow, document.documentElement.style.overflow];
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    this._onKey = (e) => this._handleKey(e);
+    document.addEventListener('keydown', this._onKey, true);
+    this._sheet.focus({ preventScroll: true });
+  }
+
+  /* Dismiss. Ignored while the request is in flight unless `force`. */
+  _closeSheet(force = false) {
+    if (!this._open || (this._busy && !force)) return;
+    this._unlockOpen();
+    this._open = false;
+    if (this._layer) this._layer.hidden = true;
+    this._stopCamera();
+    if (this._state !== 'idle') this._setState('idle');
+    if (this._fabBtn) this._fabBtn.focus({ preventScroll: true });
+  }
+
+  _unlockOpen() {
+    document.removeEventListener('keydown', this._onKey, true);
+    const [b, h] = this._prevOverflow || ['', ''];
+    document.body.style.overflow = b;
+    document.documentElement.style.overflow = h;
+  }
+
+  _handleKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this._closeSheet();
+    } else if (e.key === 'Tab' && this._sheet) { // keep focus inside the modal sheet
+      const nodes = [...this._sheet.querySelectorAll('button, input, [tabindex="0"]')]
+        .filter((n) => !n.disabled);
+      if (!nodes.length) return;
+      const active = this._portalRoot.activeElement;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (e.shiftKey && (active === first || active === this._sheet || !active)) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (active === last || !active)) {
+        e.preventDefault(); first.focus();
+      }
+    }
+  }
+
+  /* Success in fab layout: HA's toast instead of an in-sheet view. */
+  _notifyAdded() {
+    this.dispatchEvent(new CustomEvent('hass-notification', {
+      detail: { message: this._successText() }, bubbles: true, composed: true,
+    }));
+  }
+
+  _successText() {
+    const { added, title } = this._result;
+    const n = `${added} item${added === 1 ? '' : 's'}`;
+    return title ? `Added ${n} from ${title}` : `Added ${n} to your shopping list`;
   }
 
   /* ---------- live camera ---------- */
@@ -259,7 +472,7 @@ class IngredientExtractorCard extends HTMLElement {
   async _startCamera() {
     if (this._busy) return;
     this._setState('camera');
-    this.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (!this._fab()) this.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     // Most demanding first; some devices reject resolution hints outright.
     const attempts = [
       { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
@@ -296,14 +509,14 @@ class IngredientExtractorCard extends HTMLElement {
       return;
     }
     this._stream = stream;
-    const videoEl = this.shadowRoot.querySelector('video');
+    const videoEl = this._stage().querySelector('video');
     if (videoEl) videoEl.srcObject = stream;
   }
 
   /* Full-resolution still where ImageCapture exists (Chrome on Android), otherwise
    * the current video frame. prepareImage() then shrinks it like any other photo. */
   async _capture() {
-    const video = this.shadowRoot.querySelector('video');
+    const video = this._stage().querySelector('video');
     const track = this._stream && this._stream.getVideoTracks()[0];
     if (!video || !track) return;
     let blob = null;
@@ -395,7 +608,13 @@ class IngredientExtractorCard extends HTMLElement {
       };
       if (isLink) this._linkValue = '';
       this._revokeThumb();
-      this._setState('success');
+      if (this._fab()) {
+        this._notifyAdded();
+        this._closeSheet(true);
+        if (this._state !== 'idle') this._setState('idle');
+      } else {
+        this._setState('success');
+      }
     } catch (e) {
       const err = e instanceof ExtractError ? e : new ExtractError('unknown');
       this._error = { code: err.code, message: err.message, items: err.items };
@@ -420,24 +639,49 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _render() {
-    const root = this.shadowRoot;
-    const body = el('div', { class: 'body' });
-    const s = this._state;
-    if (s === 'idle') body.appendChild(this._renderPicker());
-    else if (s === 'camera') body.appendChild(this._renderViewfinder());
-    else if (s === 'working') body.appendChild(this._renderWorking());
-    else if (s === 'success') body.appendChild(this._renderSuccess());
-    else body.appendChild(this._renderError());
+    if (this._fab()) {
+      // The card is just an invisible spacer; the state views render in the sheet.
+      this.shadowRoot.replaceChildren(
+        el('style', { text: IE_SPACER_STYLE }), el('div', { class: 'spacer', 'aria-hidden': 'true' }),
+      );
+      if (!this._sheetBody) return;
+      this._sheetBody.replaceChildren(this._renderState());
+      // The view that had focus was just replaced; keep focus inside the open sheet.
+      if (this._open && !this._portalRoot.activeElement) this._sheet.focus({ preventScroll: true });
+      return;
+    }
+    const body = el('div', { class: 'body' }, [this._renderState()]);
     const card = el('ha-card', { header: this._config.title }, [body]);
-    root.replaceChildren(el('style', { text: IE_STYLE }), card);
+    this.shadowRoot.replaceChildren(el('style', { text: IE_STYLE }), card);
+  }
+
+  _renderState() {
+    const s = this._state;
+    if (s === 'idle') return this._renderPicker();
+    if (s === 'camera') return this._renderViewfinder();
+    if (s === 'working') return this._renderWorking();
+    if (s === 'success') return this._renderSuccess();
+    return this._renderError();
   }
 
   _renderPicker() {
-    return el('div', {}, [this._renderPhotoPicker(), this._renderLinkRow()]);
+    const kids = [this._renderPhotoPicker(), this._renderLinkRow()];
+    if (this._fab()) {
+      kids.push(el('p', {
+        class: 'tip',
+        text: 'Tip: share a recipe page to Home Assistant from your browser to add it without opening the app.',
+      }));
+    }
+    return el('div', {}, kids);
   }
 
   _renderPhotoPicker() {
     if (!this._showCamera()) {
+      if (this._fab()) {
+        return el('div', { class: 'tiles one' }, [
+          this._renderDropzone('mdi:image-multiple', 'Choose photo', 'Choose a recipe photo'),
+        ]);
+      }
       return this._renderDropzone('mdi:image-plus', 'Tap to choose a recipe photo', 'Attach recipe photo');
     }
     const take = this._useLiveCamera()
@@ -451,24 +695,19 @@ class IngredientExtractorCard extends HTMLElement {
 
   _renderLinkRow() {
     const input = el('input', {
-      type: 'url', inputmode: 'url', placeholder: 'Or paste a recipe link',
-      autocomplete: 'off', 'aria-label': 'Recipe link',
+      type: 'url', inputmode: 'url', autocomplete: 'off', 'aria-label': 'Recipe link',
+      placeholder: this._fab() ? 'Paste a recipe link' : 'Or paste a recipe link',
     });
     input.value = this._linkValue;
-    const pasteBtn = el('button', { type: 'button', 'aria-label': 'Paste link', title: 'Paste link' },
-      [el('ha-icon', { icon: 'mdi:content-paste' })]);
     const addBtn = el('button', { class: 'go', type: 'button', 'aria-label': 'Add', title: 'Add' },
-      [el('ha-icon', { icon: 'mdi:send' })]);
+      [el('ha-icon', { icon: 'mdi:plus' })]);
     addBtn.disabled = !input.value.trim();
-    const hint = el('p', { class: 'hint', role: 'status' });
-    hint.hidden = true;
 
     const submit = (text) => this._submitLink(text);
     input.addEventListener('input', (e) => {
       const prev = this._linkValue;
       this._linkValue = input.value;
       addBtn.disabled = !input.value.trim();
-      hint.hidden = true;
       const pasted = e.inputType === 'insertFromPaste';
       // Gboard's clipboard chip can arrive as insertText/insertReplacementText with the
       // whole URL: an empty field that becomes a complete link counts as a paste.
@@ -487,23 +726,7 @@ class IngredientExtractorCard extends HTMLElement {
       if (e.key === 'Enter') { e.preventDefault(); if (input.value.trim()) submit(input.value); }
     });
     addBtn.addEventListener('click', () => { if (input.value.trim()) submit(input.value); });
-    pasteBtn.addEventListener('click', async () => {
-      let text = null;
-      try {
-        if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
-      } catch (e) { /* denied or unavailable (Companion app WebView) */ }
-      if (typeof text === 'string' && text.trim()) {
-        input.value = text.trim();
-        this._linkValue = input.value;
-        addBtn.disabled = false;
-        if (ieExtractUrl(text)) submit(text);
-        return;
-      }
-      input.focus(); // opens the keyboard, where Gboard offers the copied link
-      hint.textContent = 'Tap your copied link above the keyboard, or long-press here to paste.';
-      hint.hidden = false;
-    });
-    return el('div', {}, [el('div', { class: 'linkrow' }, [input, pasteBtn, addBtn]), hint]);
+    return el('div', { class: 'linkrow' }, [input, addBtn]);
   }
 
   /* Same look as a dropzone, but opens the in-card viewfinder. */
@@ -572,9 +795,7 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _renderSuccess() {
-    const { added, title } = this._result;
-    const n = `${added} item${added === 1 ? '' : 's'}`;
-    const text = title ? `Added ${n} from ${title}` : `Added ${n} to your shopping list`;
+    const text = this._successText();
     return el('div', { class: 'ok', role: 'status' }, [
       el('div', { class: 'headline' }, [el('ha-icon', { icon: 'mdi:check-circle' }), el('span', { text })]),
       this._button('Add another recipe'),

@@ -35,15 +35,20 @@ It is a custom integration plus a dashboard card in one HACS package. The card i
    title: Recipe to shopping list   # optional
    camera: auto                     # optional: auto (default), true or false
    android_camera: viewfinder       # optional: viewfinder (default) or native
+   layout: inline                   # optional: inline (default) or fab
    ```
 
 On a phone or tablet the card shows **Take photo** and **Choose photo** (your photo library). On iPhone, Take photo opens the native camera; on Android, where the Companion app always opens the media picker, it opens a live viewfinder in the card instead (allow camera access when asked); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout. Once your Android Companion app opens the camera from web pages (support was merged in October 2026 and is not in release 2026.10.1), set `android_camera: native` to use the phone's own camera app instead of the viewfinder.
 
 > If the card isn't found right after installing, hard-refresh the browser (or clear the Companion app's frontend cache) so the newly registered card script loads.
 
+### Floating button layout
+
+`layout: fab` keeps the dashboard free for the list itself: the card shows a floating **+ Recipe** button (bottom right, above a floating navbar) that opens a bottom sheet with Take photo, Choose photo and the link field. Success closes the sheet and shows a toast. Place the card **after** your list — in this layout it only adds a small spacer so the last item isn't hidden under the button. Options: `fab_label` (default `Recipe`), `fab_bottom` (default `108px`).
+
 ### Recipe links
 
-- **Paste a link:** copy a recipe URL, then tap the paste button on the card (or paste into the link field and tap send). Inside the Android Companion app the page isn't allowed to read the clipboard, so the field opens with the keyboard instead — tap your copied link in the keyboard's suggestion strip and it's sent automatically.
+- **Paste a link:** paste a recipe URL into the link field — it's sent automatically (or tap **+**). On Android, Gboard shows your copied link above the keyboard: one tap pastes and sends it.
 - **Share from Android:** in your phone's browser, tap Share → **Home Assistant**. The ingredients are added in the background and you get a notification on that phone ("Added 12 items from Chicken Curry"). Turn this off under the integration's **Configure** options.
 
 Most recipe sites publish their ingredients as structured data (schema.org Recipe), which is used when present; otherwise the page text is read. Some sites block automated access — use a photo for those. Links to local network addresses are refused.
