@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Ingredient Extractor",
-        "description": "Photograph a recipe and its ingredients are added to a todo list. Create an API key at console.anthropic.com (usage is billed by Anthropic, typically a fraction of a cent per photo).",
+        "description": "Photograph a recipe or paste its link and its ingredients are added to a todo list. Create an API key at console.anthropic.com (usage is billed by Anthropic, typically a fraction of a cent per photo).",
         "data": {
           "provider": "AI provider",
           "api_key": "API key",
@@ -46,11 +46,13 @@
         "title": "Ingredient Extractor options",
         "data": {
           "model": "Model",
-          "todo_entity": "Todo list"
+          "todo_entity": "Todo list",
+          "share_enabled": "Add recipes shared to the Home Assistant app"
         },
         "data_description": {
           "model": "Pick a suggested model or type any model ID.",
-          "todo_entity": "Extracted ingredients are added to this todo list."
+          "todo_entity": "Extracted ingredients are added to this todo list.",
+          "share_enabled": "Share a recipe link from the Android Home Assistant app and its ingredients are added to the list. You get a notification when it is done."
         }
       }
     }

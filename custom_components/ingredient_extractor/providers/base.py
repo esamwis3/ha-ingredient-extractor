@@ -75,6 +75,6 @@ class Provider(ABC):
     async def async_extract_from_image(self, image: bytes, mime_type: str) -> Extraction:
         """Extract ingredients from one image held in memory."""
 
+    @abstractmethod
     async def async_extract_from_text(self, text: str) -> Extraction:
-        """Extract ingredients from page text (future web-link flow)."""
-        raise NotImplementedError
+        """Extract ingredients from page text scraped from a web page."""

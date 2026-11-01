@@ -27,6 +27,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_MODEL,
     CONF_PROVIDER,
+    CONF_SHARE_ENABLED,
     CONF_TODO_ENTITY,
     DEFAULT_PROVIDER,
     DEFAULT_TODO_ENTITY,
@@ -181,6 +182,9 @@ class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
                     CONF_TODO_ENTITY,
                     default=opts.get(CONF_TODO_ENTITY, DEFAULT_TODO_ENTITY),
                 ): EntitySelector(EntitySelectorConfig(domain="todo")),
+                vol.Required(
+                    CONF_SHARE_ENABLED, default=opts.get(CONF_SHARE_ENABLED, True)
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

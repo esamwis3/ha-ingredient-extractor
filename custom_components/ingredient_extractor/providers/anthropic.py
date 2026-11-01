@@ -13,7 +13,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 
 from ..const import MAX_INGREDIENTS
-from ..schema import INGREDIENTS_SCHEMA, SYSTEM_PROMPT, USER_PROMPT, parse_extraction
+from ..schema import (
+    INGREDIENTS_SCHEMA,
+    SYSTEM_PROMPT,
+    TEXT_USER_PROMPT,
+    USER_PROMPT,
+    parse_extraction,
+)
 from .base import (
     Extraction,
     Provider,
@@ -65,8 +71,30 @@ class AnthropicProvider(Provider):
 
     async def async_extract_from_image(self, image: bytes, mime_type: str) -> Extraction:
         """Send the image to Claude and parse the structured answer."""
-        client = await self._async_client()
         b64 = base64.standard_b64encode(image).decode("ascii")
+        try:
+            return await self._async_extract(
+                [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": mime_type, "data": b64},
+                    },
+                    {"type": "text", "text": USER_PROMPT},
+                ],
+                "image",
+            )
+        finally:
+            del b64
+
+    async def async_extract_from_text(self, text: str) -> Extraction:
+        """Send scraped page text to Claude and parse the structured answer."""
+        # The page cannot close the wrapper tag early and smuggle text outside it.
+        wrapped = TEXT_USER_PROMPT.format(text=text.replace("</recipe_page>", ""))
+        return await self._async_extract([{"type": "text", "text": wrapped}], "page")
+
+    async def _async_extract(self, content: list[dict], what: str) -> Extraction:
+        """Run one structured-output call and validate the answer."""
+        client = await self._async_client()
         try:
             response = await client.messages.create(
                 model=self.model,
@@ -77,30 +105,13 @@ class AnthropicProvider(Provider):
                     "effort": "low",
                     "format": {"type": "json_schema", "schema": INGREDIENTS_SCHEMA},
                 },
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": mime_type,
-                                    "data": b64,
-                                },
-                            },
-                            {"type": "text", "text": USER_PROMPT},
-                        ],
-                    }
-                ],
+                messages=[{"role": "user", "content": content}],
             )
         except anthropic.AnthropicError as err:
             raise self._map_error(err) from None
-        finally:
-            del b64
 
         if response.stop_reason == "refusal":
-            raise ProviderError("The AI declined to read this image")
+            raise ProviderError(f"The AI declined to read this {what}")
         if response.stop_reason == "max_tokens":
             raise ProviderError("The AI's answer was cut off; try a smaller recipe")
         text = next((b.text for b in response.content if b.type == "text"), None)

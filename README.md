@@ -1,6 +1,6 @@
 # Ingredient Extractor for Home Assistant
 
-Snap or pick a photo of a recipe and the ingredients — with amounts — land on your Home Assistant shopping list, one item each:
+Snap a photo of a recipe, paste a recipe link, or share one from your phone's browser, and the ingredients — with amounts — land on your Home Assistant shopping list, one item each:
 
 ```
 500g plain flour
@@ -41,6 +41,13 @@ On a phone or tablet the card shows **Take photo** and **Choose photo** (your ph
 
 > If the card isn't found right after installing, hard-refresh the browser (or clear the Companion app's frontend cache) so the newly registered card script loads.
 
+### Recipe links
+
+- **Paste a link:** copy a recipe URL, then tap the paste button on the card (or paste into the link field and tap send). Inside the Android Companion app the page isn't allowed to read the clipboard, so the field opens with the keyboard instead — tap your copied link in the keyboard's suggestion strip and it's sent automatically.
+- **Share from Android:** in your phone's browser, tap Share → **Home Assistant**. The ingredients are added in the background and you get a notification on that phone ("Added 12 items from Chicken Curry"). Turn this off under the integration's **Configure** options.
+
+Most recipe sites publish their ingredients as structured data (schema.org Recipe), which is used when present; otherwise the page text is read. Some sites block automated access — use a photo for those. Links to local network addresses are refused.
+
 ## Options
 
 **Settings → Devices & services → Ingredient Extractor → Configure**
@@ -49,6 +56,7 @@ On a phone or tablet the card shows **Take photo** and **Choose photo** (your ph
 |---|---|---|
 | Model | `claude-haiku-5-5` | Any model your key can use; you can type a custom model ID. |
 | Shopping list | `todo.shopping_list` | Any `todo` entity that supports adding items. |
+| Add recipes shared to the Home Assistant app | on | Android only: links shared to the app are added in the background, with a notification. |
 
 Use **Reconfigure** on the integration to change the API key.
 
@@ -64,7 +72,7 @@ Units are kept as written in the recipe, in short form. When a recipe prints a m
 
 ## Cost
 
-With Claude Haiku 5.5 one photo is roughly 2,800 input and 500 output tokens — about **$0.0005 per recipe**, or under 2 cents a month at 30 recipes (Anthropic pricing, November 2026).
+With Claude Haiku 5.5 one photo is roughly 2,800 input and 700 output tokens — about **$0.0006 per recipe**; a link with structured recipe data is about **$0.0002**. Under 2 cents a month at 30 recipes (Anthropic pricing, November 2026).
 
 ## Troubleshooting
 
@@ -91,7 +99,6 @@ Photos are sent to the AI provider you configure and are subject to its data pol
 
 ## Roadmap
 
-- Paste a recipe web link
 - Add or sort ingredients manually
 - More AI providers
 

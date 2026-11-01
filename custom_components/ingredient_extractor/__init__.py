@@ -11,7 +11,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
@@ -21,14 +21,17 @@ from .const import (
     CARD_URL_BASE,
     CONF_MODEL,
     CONF_PROVIDER,
+    CONF_SHARE_ENABLED,
     CONF_TODO_ENTITY,
     DEFAULT_PROVIDER,
     DEFAULT_TODO_ENTITY,
     DOMAIN,
+    EVENT_MOBILE_APP_SHARE,
 )
 from .http import IngredientExtractView
 from .providers import get_provider_class
 from .providers.base import Provider
+from .share import async_handle_share
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,11 +82,21 @@ async def async_setup_entry(
         provider=provider,
         todo_entity=entry.options.get(CONF_TODO_ENTITY, DEFAULT_TODO_ENTITY),
     )
+
+    if entry.options.get(CONF_SHARE_ENABLED, True):
+
+        @callback
+        def _on_share(event: Event) -> None:
+            entry.async_create_background_task(
+                hass, async_handle_share(hass, entry, event), "ingredient_extractor_share"
+            )
+
+        entry.async_on_unload(hass.bus.async_listen(EVENT_MOBILE_APP_SHARE, _on_share))
     return True
 
 
 async def async_unload_entry(
     hass: HomeAssistant, entry: IngredientExtractorConfigEntry
 ) -> bool:
-    """Nothing to tear down; the view and card stay registered."""
+    """The share listener is removed by async_on_unload; the view and card stay."""
     return True

@@ -1,4 +1,4 @@
-"""HTTP endpoint the card uploads recipe photos to."""
+"""HTTP endpoint the card posts recipe photos and links to."""
 
 from __future__ import annotations
 
@@ -14,6 +14,9 @@ from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from .const import (
     API_EXTRACT_URL,
     DOMAIN,
+    ERR_BLOCKED_URL,
+    ERR_FETCH_FAILED,
+    ERR_INVALID_URL,
     ERR_NO_IMAGE,
     ERR_NO_INGREDIENTS,
     ERR_NOT_A_RECIPE,
@@ -32,7 +35,9 @@ from .extractor import (
     NotARecipeError,
     TodoAddError,
     async_extract_and_add,
+    async_extract_url_and_add,
 )
+from .fetch import BlockedUrlError, FetchError, InvalidUrlError
 from .providers.base import ProviderAuthError, ProviderError, ProviderTimeoutError
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,15 +89,73 @@ async def _read_image(request: web.Request) -> bytes | None:
     return None
 
 
+def describe_extract_error(
+    err: Exception, what: str
+) -> tuple[HTTPStatus, str, str] | None:
+    """Map an extraction failure to (status, code, user-safe message)."""
+    if isinstance(err, NotARecipeError):
+        return HTTPStatus.UNPROCESSABLE_ENTITY, ERR_NOT_A_RECIPE, "That doesn't look like a recipe"
+    if isinstance(err, NoIngredientsError):
+        return (
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            ERR_NO_INGREDIENTS,
+            f"No ingredients could be read from that {what}",
+        )
+    if isinstance(err, InvalidUrlError):
+        return HTTPStatus.BAD_REQUEST, ERR_INVALID_URL, "That doesn't look like a web link"
+    if isinstance(err, BlockedUrlError):
+        return (
+            HTTPStatus.BAD_REQUEST,
+            ERR_BLOCKED_URL,
+            "Links to local network addresses aren't allowed",
+        )
+    if isinstance(err, FetchError):
+        return HTTPStatus.BAD_GATEWAY, ERR_FETCH_FAILED, str(err)
+    if isinstance(err, ProviderAuthError):
+        return HTTPStatus.BAD_GATEWAY, ERR_PROVIDER_AUTH, str(err)
+    if isinstance(err, ProviderTimeoutError):
+        return HTTPStatus.GATEWAY_TIMEOUT, ERR_TIMEOUT, str(err)
+    if isinstance(err, ProviderError):
+        return HTTPStatus.BAD_GATEWAY, ERR_PROVIDER, str(err)
+    if isinstance(err, TodoAddError):
+        return (
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+            ERR_TODO,
+            "Could not add items to the todo list",
+        )
+    return None
+
+
+def _map_extract_error(err: Exception, what: str) -> web.Response:
+    """Turn an extraction failure into its error response."""
+    status, code, message = describe_extract_error(err, what) or (
+        HTTPStatus.INTERNAL_SERVER_ERROR,
+        ERR_PROVIDER,
+        "Unexpected error",
+    )
+    return _error(status, code, message, err.added if isinstance(err, TodoAddError) else None)
+
+
+EXTRACT_ERRORS = (
+    NotARecipeError,
+    NoIngredientsError,
+    InvalidUrlError,
+    BlockedUrlError,
+    FetchError,
+    ProviderError,
+    TodoAddError,
+)
+
+
 class IngredientExtractView(HomeAssistantView):
-    """POST a recipe photo, get ingredients added to the todo list."""
+    """POST a recipe photo or link, get ingredients added to the todo list."""
 
     url = API_EXTRACT_URL
     name = "api:ingredient_extractor:extract"
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
-        """Handle an upload."""
+        """Handle a photo upload (multipart) or a link (JSON)."""
         request._client_max_size = MAX_REQUEST_BYTES  # noqa: SLF001
         too_large = _error(
             HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
@@ -112,6 +175,41 @@ class IngredientExtractView(HomeAssistantView):
             )
         runtime = entries[0].runtime_data
 
+        if request.content_type == "application/json":
+            return await self._post_link(request, runtime)
+        return await self._post_photo(request, runtime, too_large)
+
+    async def _post_link(self, request: web.Request, runtime: Any) -> web.Response:
+        """Extract from a `{"url": ...}` body."""
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        url = body.get("url") if isinstance(body, dict) else None
+        if not isinstance(url, str) or not url.strip():
+            return _error(
+                HTTPStatus.BAD_REQUEST, ERR_INVALID_URL, "That doesn't look like a web link"
+            )
+
+        started = time.monotonic()
+        _LOGGER.debug("Extracting from a link")
+        try:
+            items, title = await async_extract_url_and_add(
+                request.app[KEY_HASS],
+                runtime.provider,
+                runtime.todo_entity,
+                url.strip(),
+                runtime.lock,
+            )
+        except EXTRACT_ERRORS as err:
+            return _map_extract_error(err, "page")
+        return _success(runtime, items, title, started)
+
+    async def _post_photo(
+        self, request: web.Request, runtime: Any, too_large: web.Response
+    ) -> web.Response:
+        """Extract from an uploaded `image` part."""
+        hass = request.app[KEY_HASS]
         image: bytes | None = None
         try:
             try:
@@ -141,42 +239,26 @@ class IngredientExtractView(HomeAssistantView):
                     mime,
                     runtime.lock,
                 )
-            except NotARecipeError:
-                return _error(
-                    HTTPStatus.UNPROCESSABLE_ENTITY,
-                    ERR_NOT_A_RECIPE,
-                    "That doesn't look like a recipe",
-                )
-            except NoIngredientsError:
-                return _error(
-                    HTTPStatus.UNPROCESSABLE_ENTITY,
-                    ERR_NO_INGREDIENTS,
-                    "No ingredients could be read from that image",
-                )
-            except ProviderAuthError as err:
-                return _error(HTTPStatus.BAD_GATEWAY, ERR_PROVIDER_AUTH, str(err))
-            except ProviderTimeoutError as err:
-                return _error(HTTPStatus.GATEWAY_TIMEOUT, ERR_TIMEOUT, str(err))
-            except ProviderError as err:
-                return _error(HTTPStatus.BAD_GATEWAY, ERR_PROVIDER, str(err))
-            except TodoAddError as err:
-                return _error(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    ERR_TODO,
-                    "Could not add items to the todo list",
-                    err.added,
-                )
-
-            duration_ms = round((time.monotonic() - started) * 1000)
-            _LOGGER.debug("Added %d items in %d ms", len(items), duration_ms)
-            return web.json_response(
-                {
-                    "ok": True,
-                    "items": items,
-                    "added": len(items),
-                    "todo_entity": runtime.todo_entity,
-                    "duration_ms": duration_ms,
-                }
-            )
+            except EXTRACT_ERRORS as err:
+                return _map_extract_error(err, "image")
+            return _success(runtime, items, None, started)
         finally:
             del image
+
+
+def _success(
+    runtime: Any, items: list[str], title: str | None, started: float
+) -> web.Response:
+    """Build the 200 response."""
+    duration_ms = round((time.monotonic() - started) * 1000)
+    _LOGGER.debug("Added %d items in %d ms", len(items), duration_ms)
+    return web.json_response(
+        {
+            "ok": True,
+            "items": items,
+            "added": len(items),
+            "todo_entity": runtime.todo_entity,
+            "duration_ms": duration_ms,
+            "title": title,
+        }
+    )

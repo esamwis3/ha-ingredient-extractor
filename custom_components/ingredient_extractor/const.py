@@ -9,6 +9,8 @@ DOMAIN: Final = "ingredient_extractor"
 CONF_PROVIDER: Final = "provider"
 CONF_MODEL: Final = "model"
 CONF_TODO_ENTITY: Final = "todo_entity"
+CONF_SHARE_ENABLED: Final = "share_enabled"
+CONF_SHARE_ENABLED: Final = "share_enabled"
 
 DEFAULT_PROVIDER: Final = "anthropic"
 DEFAULT_TODO_ENTITY: Final = "todo.shopping_list"
@@ -30,6 +32,15 @@ ALLOWED_IMAGE_TYPES: Final = frozenset(
 EXTRACT_TIMEOUT_SECONDS: Final = 45
 MAX_INGREDIENTS: Final = 60
 
+# Web page fetching (recipe links).
+FETCH_TIMEOUT_SECONDS: Final = 15
+MAX_PAGE_BYTES: Final = 3 * 1024 * 1024
+MAX_PAGE_TEXT_CHARS: Final = 15_000
+MAX_REDIRECTS: Final = 5
+
+# Event fired by the Android Companion app's share sheet.
+EVENT_MOBILE_APP_SHARE: Final = "mobile_app.share"
+
 # Error codes returned to the card (`{"ok": false, "error": <code>, "message": ...}`).
 ERR_NO_IMAGE: Final = "no_image"
 ERR_TOO_LARGE: Final = "too_large"
@@ -41,3 +52,6 @@ ERR_TIMEOUT: Final = "timeout"
 ERR_PROVIDER: Final = "provider_error"
 ERR_TODO: Final = "todo_error"
 ERR_NOT_CONFIGURED: Final = "not_configured"
+ERR_INVALID_URL: Final = "invalid_url"
+ERR_BLOCKED_URL: Final = "blocked_url"
+ERR_FETCH_FAILED: Final = "fetch_failed"

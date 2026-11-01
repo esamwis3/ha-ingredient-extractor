@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.9';
+const IE_VERSION = '0.2.0';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -17,6 +17,9 @@ const IE_MESSAGES = {
   timeout: 'The AI took too long to respond. Please try again.',
   todo_error: "Some items couldn't be added to the list.",
   not_configured: "Ingredient Extractor isn't set up yet. Add the integration first.",
+  invalid_url: "That doesn't look like a web link.",
+  blocked_url: "Links to local network addresses aren't allowed.",
+  fetch_failed: "Couldn't open that page. The site may block automated access — try a photo instead.",
   unknown: 'Something went wrong. Please try again.',
 };
 
@@ -86,7 +89,41 @@ const IE_STYLE = `
     position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 8px;
   }
   .viewfinder .actions button { flex: 1; margin-top: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
+  /* Recipe-link row: input + paste + add. */
+  .linkrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .linkrow input {
+    flex: 1; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 0 12px;
+    font: inherit; color: var(--primary-text-color); background: var(--secondary-background-color);
+    border: 1px solid var(--divider-color); border-radius: 22px;
+  }
+  .linkrow input::placeholder { color: var(--secondary-text-color); }
+  .linkrow input:focus { outline: 2px solid var(--primary-color); outline-offset: 1px; border-color: var(--primary-color); }
+  .linkrow button {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0; cursor: pointer; border: 0; border-radius: 50%;
+    color: var(--primary-text-color); background: var(--secondary-background-color);
+  }
+  .linkrow button.go { color: var(--text-primary-color, #fff); background: var(--primary-color); }
+  .linkrow button:disabled { opacity: .45; cursor: default; }
+  .linkrow button:focus-visible { outline: 2px solid var(--primary-text-color); outline-offset: 2px; }
+  .linkrow ha-icon { --mdc-icon-size: 22px; }
+  .hint { margin: 6px 0 0; font-size: .875rem; color: var(--secondary-text-color); }
+  .status .sub { font-size: .875rem; color: var(--secondary-text-color); overflow-wrap: anywhere; }
 `;
+
+/* First http(s) URL in free text (share text often reads "Recipe name https://..."),
+ * or null if it is not a valid web link. */
+function ieExtractUrl(text) {
+  const m = /https?:\/\/[^\s<>"']+/i.exec(String(text || ''));
+  if (!m) return null;
+  const raw = m[0].replace(/[.,;:!?)\]]+$/, '');
+  try {
+    const u = new URL(raw);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && u.hostname ? u : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 /* Tiny DOM helper: all text goes through textContent, never innerHTML. */
 function el(tag, props = {}, children = []) {
@@ -162,6 +199,8 @@ class IngredientExtractorCard extends HTMLElement {
     this._state = 'idle'; // idle | working | success | error
     this._thumbUrl = null;
     this._busy = false;
+    this._linkValue = ''; // survives re-renders (e.g. a detour via a photo tile)
+    this._workingHost = null;
     this.attachShadow({ mode: 'open' });
   }
 
@@ -297,6 +336,7 @@ class IngredientExtractorCard extends HTMLElement {
   _handleFile(file) {
     if (this._busy || !file) return;
     this._revokeThumb();
+    this._workingHost = null;
     this._thumbUrl = !file.type || file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
     this._submit(async () => {
       const blob = await prepareImage(file);
@@ -306,8 +346,22 @@ class IngredientExtractorCard extends HTMLElement {
     });
   }
 
+  /* Recipe link: validate client-side, then POST {"url": ...} as JSON. */
+  _submitLink(text) {
+    if (this._busy) return;
+    const url = ieExtractUrl(String(text || '').trim());
+    if (!url) {
+      this._error = { code: 'invalid_url', message: IE_MESSAGES.invalid_url };
+      this._setState('error');
+      return;
+    }
+    this._revokeThumb();
+    this._workingHost = url.hostname;
+    this._submit(async () => JSON.stringify({ url: url.href }), true);
+  }
+
   /* Generic pathway: payloadBuilder() resolves to a request body. */
-  async _submit(payloadBuilder) {
+  async _submit(payloadBuilder, isLink = false) {
     if (this._busy) return;
     this._busy = true;
     this._setState('working');
@@ -320,7 +374,10 @@ class IngredientExtractorCard extends HTMLElement {
       timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, IE_TIMEOUT_MS);
       let resp;
       try {
-        resp = await this._hass.fetchWithAuth(IE_ENDPOINT, { method: 'POST', body, signal: ctrl.signal });
+        const init = { method: 'POST', body, signal: ctrl.signal };
+        // A string body is JSON; FormData must keep the browser-set multipart boundary.
+        if (typeof body === 'string') init.headers = { 'Content-Type': 'application/json' };
+        resp = await this._hass.fetchWithAuth(IE_ENDPOINT, init);
       } catch (e) {
         throw new ExtractError(timedOut ? 'timeout' : 'unknown');
       }
@@ -331,7 +388,12 @@ class IngredientExtractorCard extends HTMLElement {
         throw new ExtractError(data.error || 'unknown', data.message, data.items);
       }
       const items = Array.isArray(data.items) ? data.items.map(String) : [];
-      this._result = { items, added: Number.isFinite(data.added) ? data.added : items.length };
+      this._result = {
+        items,
+        added: Number.isFinite(data.added) ? data.added : items.length,
+        title: typeof data.title === 'string' && data.title.trim() ? data.title.trim() : null,
+      };
+      if (isLink) this._linkValue = '';
       this._revokeThumb();
       this._setState('success');
     } catch (e) {
@@ -371,6 +433,10 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _renderPicker() {
+    return el('div', {}, [this._renderPhotoPicker(), this._renderLinkRow()]);
+  }
+
+  _renderPhotoPicker() {
     if (!this._showCamera()) {
       return this._renderDropzone('mdi:image-plus', 'Tap to choose a recipe photo', 'Attach recipe photo');
     }
@@ -381,6 +447,63 @@ class IngredientExtractorCard extends HTMLElement {
       take,
       this._renderDropzone('mdi:image-multiple', 'Choose photo', 'Choose a recipe photo'),
     ]);
+  }
+
+  _renderLinkRow() {
+    const input = el('input', {
+      type: 'url', inputmode: 'url', placeholder: 'Or paste a recipe link',
+      autocomplete: 'off', 'aria-label': 'Recipe link',
+    });
+    input.value = this._linkValue;
+    const pasteBtn = el('button', { type: 'button', 'aria-label': 'Paste link', title: 'Paste link' },
+      [el('ha-icon', { icon: 'mdi:content-paste' })]);
+    const addBtn = el('button', { class: 'go', type: 'button', 'aria-label': 'Add', title: 'Add' },
+      [el('ha-icon', { icon: 'mdi:send' })]);
+    addBtn.disabled = !input.value.trim();
+    const hint = el('p', { class: 'hint', role: 'status' });
+    hint.hidden = true;
+
+    const submit = (text) => this._submitLink(text);
+    input.addEventListener('input', (e) => {
+      const prev = this._linkValue;
+      this._linkValue = input.value;
+      addBtn.disabled = !input.value.trim();
+      hint.hidden = true;
+      const pasted = e.inputType === 'insertFromPaste';
+      // Gboard's clipboard chip can arrive as insertText/insertReplacementText with the
+      // whole URL: an empty field that becomes a complete link counts as a paste.
+      const chip = !prev.trim() && /^https?:\/\/\S+$/i.test(input.value.trim());
+      if ((pasted || chip) && ieExtractUrl(input.value)) submit(input.value);
+    });
+    input.addEventListener('paste', (e) => {
+      const text = e.clipboardData && e.clipboardData.getData('text');
+      if (!text || !ieExtractUrl(text)) return; // no link: let the browser paste normally
+      e.preventDefault();
+      input.value = text.trim();
+      this._linkValue = input.value;
+      submit(text);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (input.value.trim()) submit(input.value); }
+    });
+    addBtn.addEventListener('click', () => { if (input.value.trim()) submit(input.value); });
+    pasteBtn.addEventListener('click', async () => {
+      let text = null;
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
+      } catch (e) { /* denied or unavailable (Companion app WebView) */ }
+      if (typeof text === 'string' && text.trim()) {
+        input.value = text.trim();
+        this._linkValue = input.value;
+        addBtn.disabled = false;
+        if (ieExtractUrl(text)) submit(text);
+        return;
+      }
+      input.focus(); // opens the keyboard, where Gboard offers the copied link
+      hint.textContent = 'Tap your copied link above the keyboard, or long-press here to paste.';
+      hint.hidden = false;
+    });
+    return el('div', {}, [el('div', { class: 'linkrow' }, [input, pasteBtn, addBtn]), hint]);
   }
 
   /* Same look as a dropzone, but opens the in-card viewfinder. */
@@ -437,8 +560,10 @@ class IngredientExtractorCard extends HTMLElement {
     const spinner = customElements.get('ha-circular-progress')
       ? el('ha-circular-progress', { indeterminate: true, size: 'small' })
       : el('div', { class: 'spinner' });
-    const kids = [spinner, el('div', { class: 'text', text: 'Reading recipe…' })];
-    if (this._thumbUrl) kids.push(el('img', { class: 'thumb', src: this._thumbUrl, alt: 'Selected recipe photo' }));
+    const textKids = [el('div', { text: 'Reading recipe…' })];
+    if (this._workingHost) textKids.push(el('div', { class: 'sub', text: this._workingHost }));
+    const kids = [spinner, el('div', { class: 'text' }, textKids)];
+    if (this._thumbUrl && !this._workingHost) kids.push(el('img', { class: 'thumb', src: this._thumbUrl, alt: 'Selected recipe photo' }));
     return el('div', { class: 'status', role: 'status', 'aria-live': 'polite' }, kids);
   }
 
@@ -447,8 +572,9 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _renderSuccess() {
-    const { added } = this._result;
-    const text = `Added ${added} item${added === 1 ? '' : 's'} to your shopping list`;
+    const { added, title } = this._result;
+    const n = `${added} item${added === 1 ? '' : 's'}`;
+    const text = title ? `Added ${n} from ${title}` : `Added ${n} to your shopping list`;
     return el('div', { class: 'ok', role: 'status' }, [
       el('div', { class: 'headline' }, [el('ha-icon', { icon: 'mdi:check-circle' }), el('span', { text })]),
       this._button('Add another recipe'),
