@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.4';
+const IE_VERSION = '0.1.5';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -72,6 +72,16 @@ const IE_STYLE = `
     border: 0; border-radius: 8px; cursor: pointer;
   }
   button.action:focus-visible { outline: 2px solid var(--primary-text-color); outline-offset: 2px; }
+  button.action.secondary {
+    color: var(--primary-text-color); background: var(--secondary-background-color);
+  }
+  /* Live viewfinder (Android, where the app ignores the file input's capture hint). */
+  .viewfinder video {
+    display: block; width: 100%; max-height: 60vh; object-fit: contain;
+    background: #000; border-radius: var(--ha-card-border-radius, 12px);
+  }
+  .viewfinder .actions { display: flex; gap: 8px; }
+  .viewfinder .actions button { flex: 1; }
 `;
 
 /* Tiny DOM helper: all text goes through textContent, never innerHTML. */
@@ -173,6 +183,14 @@ class IngredientExtractorCard extends HTMLElement {
     return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   }
 
+  /* The Android Companion app (and Android WebView generally) ignores `capture` and
+   * always opens the media picker, so there the card runs its own viewfinder. iOS
+   * honours `capture` and opens the native camera, which is the better experience. */
+  _useLiveCamera() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      && /Android/i.test(navigator.userAgent);
+  }
+
   // Store only; re-rendering on every hass update would wipe the current state.
   set hass(hass) { this._hass = hass; }
 
@@ -180,7 +198,68 @@ class IngredientExtractorCard extends HTMLElement {
   getGridOptions() { return { columns: 12, min_rows: 2 }; }
   static getStubConfig() { return {}; }
 
-  disconnectedCallback() { this._revokeThumb(); }
+  disconnectedCallback() {
+    this._revokeThumb();
+    this._stopCamera();
+  }
+
+  /* ---------- live camera ---------- */
+
+  async _startCamera() {
+    if (this._busy) return;
+    this._setState('camera');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+      });
+      if (this._state !== 'camera') { // cancelled while the permission prompt was up
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      this._stream = stream;
+      const video = this.shadowRoot.querySelector('video');
+      if (video) video.srcObject = stream;
+    } catch (e) {
+      this._stopCamera();
+      this._error = {
+        code: 'camera',
+        message: "The camera couldn't be opened. Allow camera access for the app, or use Choose photo.",
+      };
+      this._setState('error');
+    }
+  }
+
+  /* Full-resolution still where ImageCapture exists (Chrome on Android), otherwise
+   * the current video frame. prepareImage() then shrinks it like any other photo. */
+  async _capture() {
+    const video = this.shadowRoot.querySelector('video');
+    const track = this._stream && this._stream.getVideoTracks()[0];
+    if (!video || !track) return;
+    let blob = null;
+    if (typeof ImageCapture !== 'undefined') {
+      try { blob = await new ImageCapture(track).takePhoto(); } catch (e) { /* fall back to a frame */ }
+    }
+    if (!blob && video.videoWidth) {
+      const canvas = Object.assign(document.createElement('canvas'), {
+        width: video.videoWidth, height: video.videoHeight,
+      });
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+    }
+    this._stopCamera();
+    if (!blob) {
+      this._error = { code: 'camera', message: "The photo couldn't be taken. Please try again." };
+      this._setState('error');
+      return;
+    }
+    this._handleFile(new File([blob], 'camera.jpg', { type: blob.type || 'image/jpeg' }));
+  }
+
+  _stopCamera() {
+    if (this._stream) this._stream.getTracks().forEach((t) => t.stop());
+    this._stream = null;
+  }
 
   /* ---------- flow ---------- */
 
@@ -252,6 +331,7 @@ class IngredientExtractorCard extends HTMLElement {
     const body = el('div', { class: 'body' });
     const s = this._state;
     if (s === 'idle') body.appendChild(this._renderPicker());
+    else if (s === 'camera') body.appendChild(this._renderViewfinder());
     else if (s === 'working') body.appendChild(this._renderWorking());
     else if (s === 'success') body.appendChild(this._renderSuccess());
     else body.appendChild(this._renderError());
@@ -263,10 +343,36 @@ class IngredientExtractorCard extends HTMLElement {
     if (!this._showCamera()) {
       return this._renderDropzone('mdi:image-plus', 'Tap to choose a recipe photo', 'Attach recipe photo');
     }
+    const take = this._useLiveCamera()
+      ? this._renderCameraTile()
+      : this._renderDropzone('mdi:camera', 'Take photo', 'Take a photo of a recipe', 'environment');
     return el('div', { class: 'tiles' }, [
-      this._renderDropzone('mdi:camera', 'Take photo', 'Take a photo of a recipe', 'environment'),
+      take,
       this._renderDropzone('mdi:image-multiple', 'Choose photo', 'Choose a recipe photo'),
     ]);
+  }
+
+  /* Same look as a dropzone, but opens the in-card viewfinder. */
+  _renderCameraTile() {
+    const tile = el('div', {
+      class: 'dropzone', role: 'button', tabindex: '0', 'aria-label': 'Take a photo of a recipe',
+    }, [el('ha-icon', { icon: 'mdi:camera' }), el('span', { class: 'label', text: 'Take photo' })]);
+    tile.addEventListener('click', () => this._startCamera());
+    tile.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._startCamera(); }
+    });
+    return tile;
+  }
+
+  _renderViewfinder() {
+    const video = el('video', { autoplay: true, playsinline: true, muted: true });
+    video.muted = true; // attribute alone doesn't mute in every WebView
+    if (this._stream) video.srcObject = this._stream;
+    const capture = el('button', { class: 'action', type: 'button', text: 'Capture' });
+    capture.addEventListener('click', () => this._capture());
+    const cancel = el('button', { class: 'action secondary', type: 'button', text: 'Cancel' });
+    cancel.addEventListener('click', () => { this._stopCamera(); this._setState('idle'); });
+    return el('div', { class: 'viewfinder' }, [video, el('div', { class: 'actions' }, [cancel, capture])]);
   }
 
   /* A tappable label wrapping a hidden file input. With `capture`, phones open the

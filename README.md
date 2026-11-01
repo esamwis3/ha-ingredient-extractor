@@ -36,7 +36,7 @@ It is a custom integration plus a dashboard card in one HACS package. The card i
    camera: auto                     # optional: auto (default), true or false
    ```
 
-On a phone or tablet the card shows **Take photo** (opens the camera) and **Choose photo** (your photo library); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout.
+On a phone or tablet the card shows **Take photo** and **Choose photo** (your photo library). On iPhone, Take photo opens the native camera; on Android, where the Companion app always opens the media picker, it opens a live viewfinder in the card instead (allow camera access when asked); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout.
 
 > If the card isn't found right after installing, hard-refresh the browser (or clear the Companion app's frontend cache) so the newly registered card script loads.
 
