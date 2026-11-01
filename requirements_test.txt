@@ -1,2 +1,3 @@
-pytest-homeassistant-custom-component
-home-assistant-frontend  # needed so the frontend dependency can be set up in tests
+pytest-homeassistant-custom-component==0.13.375
+home-assistant-frontend==20260930.5  # needed so the frontend dependency can be set up in tests
+anthropic==0.125.0  # matches the version Home Assistant core pins
