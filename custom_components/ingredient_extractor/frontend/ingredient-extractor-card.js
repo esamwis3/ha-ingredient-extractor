@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.7';
+const IE_VERSION = '0.1.8';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -213,26 +213,44 @@ class IngredientExtractorCard extends HTMLElement {
     if (this._busy) return;
     this._setState('camera');
     this.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
-      });
-      if (this._state !== 'camera') { // cancelled while the permission prompt was up
-        stream.getTracks().forEach((t) => t.stop());
-        return;
+    // Most demanding first; some devices reject resolution hints outright.
+    const attempts = [
+      { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+      { facingMode: { ideal: 'environment' } },
+      true,
+    ];
+    let stream = null;
+    let lastError = null;
+    for (const video of attempts) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+        break;
+      } catch (e) {
+        lastError = e;
+        if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) break; // retrying won't help
       }
-      this._stream = stream;
-      const video = this.shadowRoot.querySelector('video');
-      if (video) video.srcObject = stream;
-    } catch (e) {
+    }
+    if (!stream) {
       this._stopCamera();
+      const reason = lastError && lastError.name ? lastError.name : 'unknown';
+      const denied = reason === 'NotAllowedError' || reason === 'SecurityError';
       this._error = {
         code: 'camera',
-        message: "The camera couldn't be opened. Allow camera access for the app, or use Choose photo.",
+        message: denied
+          ? "Camera access was blocked. Allow camera access for the app, or use Choose photo."
+          : "The camera couldn't be opened. Use Choose photo instead.",
+        detail: `Camera error: ${reason}${lastError && lastError.message ? ` – ${lastError.message}` : ''}`,
       };
       this._setState('error');
+      return;
     }
+    if (this._state !== 'camera') { // cancelled while the permission prompt was up
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this._stream = stream;
+    const videoEl = this.shadowRoot.querySelector('video');
+    if (videoEl) videoEl.srcObject = stream;
   }
 
   /* Full-resolution still where ImageCapture exists (Chrome on Android), otherwise
@@ -430,10 +448,11 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _renderError() {
-    const { message, items } = this._error;
+    const { message, items, detail } = this._error;
     const kids = [
       el('div', { class: 'headline' }, [el('ha-icon', { icon: 'mdi:alert-circle' }), el('span', { text: message })]),
     ];
+    if (detail) kids.push(el('p', { class: 'detail', text: detail }));
     if (Array.isArray(items) && items.length) {
       kids.push(el('p', { class: 'detail', text: 'Added before the problem:' }), this._itemList(items.map(String)));
     }
