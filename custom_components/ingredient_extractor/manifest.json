@@ -1,0 +1,14 @@
+{
+  "domain": "ingredient_extractor",
+  "name": "Ingredient Extractor",
+  "codeowners": ["@esamwis3"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "todo"],
+  "documentation": "https://github.com/esamwis3/ha-ingredient-extractor",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/esamwis3/ha-ingredient-extractor/issues",
+  "requirements": ["anthropic>=0.125.0"],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

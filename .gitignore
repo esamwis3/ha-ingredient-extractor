@@ -1,0 +1,22 @@
+# Never commit secrets or local config
+.env*
+config.json
+secrets*
+*.local
+*.key
+
+# Local test material
+test-images/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,58 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ingredient Extractor",
+        "description": "Photograph a recipe and its ingredients are added to a todo list. Create an API key at console.anthropic.com (usage is billed by Anthropic, typically a fraction of a cent per photo).",
+        "data": {
+          "provider": "AI provider",
+          "api_key": "API key",
+          "model": "Model"
+        },
+        "data_description": {
+          "provider": "The service that reads the photo.",
+          "api_key": "Your Anthropic API key, from console.anthropic.com under API keys.",
+          "model": "Pick a suggested model or type any model ID. Haiku is fast and cheap; Sonnet is more accurate on messy handwriting."
+        }
+      },
+      "reconfigure": {
+        "title": "Update Ingredient Extractor",
+        "description": "Enter a new API key or change the model. The key is checked before saving.",
+        "data": {
+          "api_key": "[%key:component::ingredient_extractor::config::step::user::data::api_key%]",
+          "model": "[%key:component::ingredient_extractor::config::step::user::data::model%]"
+        },
+        "data_description": {
+          "api_key": "[%key:component::ingredient_extractor::config::step::user::data_description::api_key%]",
+          "model": "[%key:component::ingredient_extractor::config::step::user::data_description::model%]"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The API key was rejected. Check it at console.anthropic.com.",
+      "cannot_connect": "Could not reach the AI provider. Check your internet connection and try again.",
+      "invalid_model": "That model was not found for your account.",
+      "unknown": "Unexpected error. Check the Home Assistant log for details."
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ingredient Extractor options",
+        "data": {
+          "model": "Model",
+          "todo_entity": "Todo list"
+        },
+        "data_description": {
+          "model": "Pick a suggested model or type any model ID.",
+          "todo_entity": "Extracted ingredients are added to this todo list."
+        }
+      }
+    }
+  }
+}

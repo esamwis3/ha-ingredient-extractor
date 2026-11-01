@@ -1,0 +1,2 @@
+pytest-homeassistant-custom-component
+home-assistant-frontend  # needed so the frontend dependency can be set up in tests
