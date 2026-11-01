@@ -22,6 +22,10 @@ clove, pinch, tin, can, bunch, slice, handful. Use "" for countable items with n
 "finely chopped", "softened", "to serve", "divided". Use the plural when the quantity \
 is more than one countable item.
 
+When the amount is a pack size ("400g tin chopped tomatoes", "2 x 400g tins chickpeas", \
+"500ml carton stock"), use the total weight or volume as quantity and unit \
+("400" "g", "800" "g", "500" "ml") and leave the container word out of the name.
+
 Include items listed without an amount ("salt and pepper", "olive oil"). Skip water. \
 If the recipe has several sections (e.g. sauce, topping), include all of them. \
 Never invent ingredients that are not visible."""
