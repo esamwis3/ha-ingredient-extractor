@@ -16,17 +16,22 @@ For a recipe, return every ingredient once, in the order written:
 "1-2", "1.5"). Use "" if no amount is given.
 - unit: the unit as written, in its short form: g, kg, ml, l, tsp, tbsp, cup, oz, lb, \
 clove, pinch, tin, can, bunch, slice, handful. Use "" for countable items with no unit \
-(e.g. "2 onions") or when there is no amount. Do not convert units.
+(e.g. "2 onions") or when there is no amount. Never calculate conversions yourself.
 - name: the ingredient in plain lower-case words, keeping useful descriptors \
 ("plain flour", "unsalted butter", "red onions"). Drop preparation notes such as \
 "finely chopped", "softened", "to serve", "divided". Use the plural when the quantity \
 is more than one countable item.
+- metric_quantity / metric_unit: if the same line also gives the amount in metric \
+units (g, kg, ml, l), usually in brackets, copy that metric amount exactly as written \
+("2 lbs (908 g) beef" -> quantity "2", unit "lb", metric_quantity "908", metric_unit "g"). \
+Use "" for both when no metric amount is printed. Never calculate conversions yourself.
 
 When the amount is a pack size ("400g tin chopped tomatoes", "2 x 400g tins chickpeas", \
 "500ml carton stock"), use the total weight or volume as quantity and unit \
 ("400" "g", "800" "g", "500" "ml") and leave the container word out of the name.
 
-Include items listed without an amount ("salt and pepper", "olive oil"). Skip water. \
+Include items listed without an amount ("salt and pepper", "olive oil"), keeping \
+items written together on one line as one item. Skip water. \
 If the recipe has several sections (e.g. sauce, topping), include all of them. \
 Never invent ingredients that are not visible."""
 
@@ -44,8 +49,10 @@ INGREDIENTS_SCHEMA: dict[str, Any] = {
                     "quantity": {"type": "string"},
                     "unit": {"type": "string"},
                     "name": {"type": "string"},
+                    "metric_quantity": {"type": "string"},
+                    "metric_unit": {"type": "string"},
                 },
-                "required": ["quantity", "unit", "name"],
+                "required": ["quantity", "unit", "name", "metric_quantity", "metric_unit"],
                 "additionalProperties": False,
             },
         },
@@ -72,6 +79,16 @@ def parse_extraction(data: Any, max_items: int) -> Extraction:
             continue
         quantity = str(raw.get("quantity") or "").strip() or None
         unit = str(raw.get("unit") or "").strip() or None
-        ingredients.append(Ingredient(name=name, quantity=quantity, unit=unit))
+        metric_quantity = str(raw.get("metric_quantity") or "").strip() or None
+        metric_unit = str(raw.get("metric_unit") or "").strip() or None
+        ingredients.append(
+            Ingredient(
+                name=name,
+                quantity=quantity,
+                unit=unit,
+                metric_quantity=metric_quantity,
+                metric_unit=metric_unit,
+            )
+        )
 
     return Extraction(is_recipe=data["is_recipe"], ingredients=ingredients)

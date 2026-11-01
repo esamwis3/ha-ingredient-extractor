@@ -44,3 +44,33 @@ def test_format_item(name, qty, unit, expected):
 def test_item_capped_at_255():
     """Very long names are truncated."""
     assert len(format_item(Ingredient(name="x" * 400, quantity="1"))) == 255
+
+
+@pytest.mark.parametrize(
+    ("name", "qty", "unit", "mqty", "munit", "expected"),
+    [
+        # Imperial weights/volumes and packs switch to the printed metric amount.
+        ("ground beef", "2", "lbs", "908", "g", "908g ground beef"),
+        ("macaroni", "10", "oz", "283", "g", "283g macaroni"),
+        ("broth", "2", "cups", "480", "g", "480g broth"),
+        ("milk", "1", "cup", "240", "ml", "240ml milk"),
+        ("crushed tomatoes", "1", "can", "420", "g", "420g crushed tomatoes"),
+        # Spoons and whole-item counts stay as written.
+        ("chili powder", "2", "tbsp", "18", "g", "2 tbsp chili powder"),
+        ("onion powder", "1", "tsp", "3", "g", "1 tsp onion powder"),
+        ("red bell pepper", "1", "", "150", "g", "1 red bell pepper"),
+        ("green onions", "1", "bunch", "100", "g", "1 bunch green onions"),
+        # No metric printed, or nonsense metric: keep the original.
+        ("butter", "1", "pound", "", "", "1 lb butter"),
+        ("butter", "1", "lb", "about", "g", "1 lb butter"),
+        ("butter", "1", "lb", "450", "stone", "1 lb butter"),
+        # Stray punctuation returned as the unit is dropped.
+        ("medium green bell pepper", "1", ",", "", "", "1 medium green bell pepper"),
+        ("flour", "500", "(g)", "", "", "500g flour"),
+    ],
+)
+def test_prefers_printed_metric(name, qty, unit, mqty, munit, expected):
+    ing = Ingredient(
+        name=name, quantity=qty, unit=unit, metric_quantity=mqty, metric_unit=munit
+    )
+    assert format_item(ing) == expected

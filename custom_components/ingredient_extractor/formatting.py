@@ -30,6 +30,9 @@ UNIT_ALIASES: dict[str, str] = {
 # Joined to the number with no space ("500g").
 _TIGHT_UNITS = frozenset({"g", "kg", "mg", "ml", "l", "cl"})
 _PLURALS = {"bunch": "bunches", "pinch": "pinches"}
+# Imperial weights/volumes and packs: swap for the printed metric amount when there is one.
+# Spoons and whole-item counts are kept as written.
+_PREFER_METRIC = frozenset({"lb", "oz", "cup", "pint", "quart", "stick", "tin", "can"})
 _COUNTABLE = frozenset(
     {"cup", "clove", "tin", "can", "bunch", "slice", "handful", "pinch", "sprig", "stick"}
 )
@@ -47,7 +50,8 @@ def _quantity_value(quantity: str) -> float | None:
 
 
 def _normalise_unit(unit: str) -> str:
-    key = unit.strip().lower().rstrip(".")
+    # Models occasionally return stray punctuation (",", "()") as the unit.
+    key = unit.strip().lower().strip(".,;:()[] ")
     return UNIT_ALIASES.get(key, key)
 
 
@@ -56,6 +60,15 @@ def format_item(ing: Ingredient) -> str:
     name = " ".join(ing.name.split())
     quantity = " ".join((ing.quantity or "").split())
     unit = _normalise_unit(ing.unit or "") if quantity else ""
+    metric_quantity = " ".join((ing.metric_quantity or "").split())
+    metric_unit = _normalise_unit(ing.metric_unit or "")
+    if (
+        unit in _PREFER_METRIC
+        and metric_quantity
+        and metric_unit in _TIGHT_UNITS
+        and _quantity_value(metric_quantity) is not None
+    ):
+        quantity, unit = metric_quantity, metric_unit
 
     if not quantity:
         text = name

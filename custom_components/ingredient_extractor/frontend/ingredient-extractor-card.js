@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.1';
+const IE_VERSION = '0.1.2';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit

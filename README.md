@@ -58,7 +58,7 @@ Use **Reconfigure** on the integration to change the API key.
 4. Each ingredient is formatted (`500g plain flour`, `2 tbsp olive oil`, `2 onions`) and added with `todo.add_item`.
 5. The image bytes are dropped as soon as the request finishes.
 
-Units are kept as written in the recipe, in short form. Items already on your list are not merged.
+Units are kept as written in the recipe, in short form. When a recipe prints a metric amount alongside an imperial one ("2 lbs (908 g)", "1 cup (240 ml)", "1 can (420 g)"), the metric amount is used; spoon measures and whole items ("2 tsp paprika", "1 red pepper") stay as written. Items already on your list are not merged.
 
 ## Cost
 

@@ -15,6 +15,9 @@ class Ingredient:
     name: str
     quantity: str | None = None
     unit: str | None = None
+    #: Metric alternative printed alongside, e.g. "908" "g" for "2 lbs (908 g)".
+    metric_quantity: str | None = None
+    metric_unit: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
