@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.3';
+const IE_VERSION = '0.1.4';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -36,6 +36,9 @@ const IE_STYLE = `
   .dropzone:focus-within { outline: 2px solid var(--primary-color); outline-offset: 2px; }
   .dropzone ha-icon { --mdc-icon-size: 40px; color: var(--primary-color); }
   .dropzone .label { font-size: 1rem; color: var(--primary-text-color); }
+  /* Camera + library side by side on touch devices. */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tiles .dropzone { min-height: 120px; padding: 16px 8px; }
   /* Visually hidden but still focusable, so keyboard and screen readers work. */
   .sr-input {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
@@ -148,15 +151,26 @@ class IngredientExtractorCard extends HTMLElement {
     this.attachShadow({ mode: 'open' });
   }
 
-  // Future modes (e.g. `mode: capture` for camera, link, manual add) would be
-  // read from config here and just supply a different payload builder to _submit.
+  // Future modes (link, manual add) would be read from config here and just supply
+  // a different payload builder to _submit.
   setConfig(config) {
     if (config != null && typeof config !== 'object') throw new Error('Invalid configuration');
     if (config && config.title != null && typeof config.title !== 'string') {
       throw new Error('"title" must be a string');
     }
-    this._config = { title: 'Recipe to shopping list', ...(config || {}) };
+    if (config && config.camera != null && ![true, false, 'auto'].includes(config.camera)) {
+      throw new Error('"camera" must be true, false or auto');
+    }
+    this._config = { title: 'Recipe to shopping list', camera: 'auto', ...(config || {}) };
     this._setState('idle');
+  }
+
+  /* Camera tile: forced by config, otherwise only on touch-first devices, where
+   * `capture` opens the camera. Desktop browsers ignore `capture`. */
+  _showCamera() {
+    const { camera } = this._config;
+    if (camera !== 'auto') return camera;
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   }
 
   // Store only; re-rendering on every hass update would wipe the current state.
@@ -237,7 +251,7 @@ class IngredientExtractorCard extends HTMLElement {
     const root = this.shadowRoot;
     const body = el('div', { class: 'body' });
     const s = this._state;
-    if (s === 'idle') body.appendChild(this._renderDropzone());
+    if (s === 'idle') body.appendChild(this._renderPicker());
     else if (s === 'working') body.appendChild(this._renderWorking());
     else if (s === 'success') body.appendChild(this._renderSuccess());
     else body.appendChild(this._renderError());
@@ -245,10 +259,22 @@ class IngredientExtractorCard extends HTMLElement {
     root.replaceChildren(el('style', { text: IE_STYLE }), card);
   }
 
-  _renderDropzone() {
+  _renderPicker() {
+    if (!this._showCamera()) {
+      return this._renderDropzone('mdi:image-plus', 'Tap to choose a recipe photo', 'Attach recipe photo');
+    }
+    return el('div', { class: 'tiles' }, [
+      this._renderDropzone('mdi:camera', 'Take photo', 'Take a photo of a recipe', 'environment'),
+      this._renderDropzone('mdi:image-multiple', 'Choose photo', 'Choose a recipe photo'),
+    ]);
+  }
+
+  /* A tappable label wrapping a hidden file input. With `capture`, phones open the
+   * camera directly instead of the picker. */
+  _renderDropzone(icon, text, ariaLabel, capture) {
     const input = el('input', {
-      class: 'sr-input', type: 'file', accept: 'image/*',
-      'aria-label': 'Attach recipe photo',
+      class: 'sr-input', type: 'file', accept: 'image/*', capture,
+      'aria-label': ariaLabel,
     });
     input.addEventListener('change', () => {
       const file = input.files && input.files[0];
@@ -256,8 +282,8 @@ class IngredientExtractorCard extends HTMLElement {
       this._handleFile(file);
     });
     const zone = el('label', { class: 'dropzone' }, [
-      el('ha-icon', { icon: 'mdi:image-plus' }),
-      el('span', { class: 'label', text: 'Tap to choose a recipe photo' }),
+      el('ha-icon', { icon }),
+      el('span', { class: 'label', text }),
       input,
     ]);
     zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag'); });

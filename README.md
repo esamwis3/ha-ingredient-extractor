@@ -33,9 +33,10 @@ It is a custom integration plus a dashboard card in one HACS package. The card i
    ```yaml
    type: custom:ingredient-extractor-card
    title: Recipe to shopping list   # optional
+   camera: auto                     # optional: auto (default), true or false
    ```
 
-Tap the card, choose a photo, and the added items appear on the card.
+On a phone or tablet the card shows **Take photo** (opens the camera) and **Choose photo** (your photo library); on a desktop it shows a single box you can click or drop a photo onto. `camera: true` or `false` forces either layout.
 
 > If the card isn't found right after installing, hard-refresh the browser (or clear the Companion app's frontend cache) so the newly registered card script loads.
 
@@ -87,7 +88,6 @@ Photos are sent to the AI provider you configure and are subject to its data pol
 
 ## Roadmap
 
-- Take a photo with the camera
 - Paste a recipe web link
 - Add or sort ingredients manually
 - More AI providers
