@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.1.0';
+const IE_VERSION = '0.1.1';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -284,11 +284,10 @@ class IngredientExtractorCard extends HTMLElement {
   }
 
   _renderSuccess() {
-    const { items, added } = this._result;
+    const { added } = this._result;
     const text = `Added ${added} item${added === 1 ? '' : 's'} to your shopping list`;
     return el('div', { class: 'ok', role: 'status' }, [
       el('div', { class: 'headline' }, [el('ha-icon', { icon: 'mdi:check-circle' }), el('span', { text })]),
-      this._itemList(items),
       this._button('Add another recipe'),
     ]);
   }
