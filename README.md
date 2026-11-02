@@ -62,7 +62,7 @@ Most recipe sites publish their ingredients as structured data (schema.org Recip
 
 | Option | Default | |
 |---|---|---|
-| API key | (from setup) | Leave blank to keep the current key. A new key is checked with Anthropic before it is saved. |
+| API key | (from setup) | Leave blank to keep the current key. A new key is checked with Anthropic before it is saved, and a ✅ confirmation shows when it is accepted. |
 | Model | `claude-haiku-5-5` | Any model your key can use; you can type a custom model ID. |
 | Shopping list | `todo.shopping_list` | Any `todo` entity that supports adding items. |
 | Add recipes shared to the Home Assistant app | on | Android only: links shared to the app are added in the background, with a notification. |

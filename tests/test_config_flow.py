@@ -169,22 +169,33 @@ def _options_entry(hass: HomeAssistant) -> MockConfigEntry:
 
 
 async def test_options_flow_new_api_key(hass: HomeAssistant) -> None:
-    """A new key is validated, saved to the entry data and kept out of the options."""
+    """A new key is validated, saved, confirmed, and kept out of the options."""
     entry = _options_entry(hass)
     with patch(VALIDATE) as validate, patch(
         "custom_components.ingredient_extractor.async_setup_entry", return_value=True
     ), patch.object(hass.config_entries, "async_schedule_reload") as reload:
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {CONF_API_KEY: " new-key ", **entry.options}
+            result["flow_id"],
+            {CONF_API_KEY: " new-key ", **entry.options, "auto_sort": False},
+        )
+        # Saved before the confirmation is shown, so closing it keeps the key.
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "api_key_valid"
+        assert result["description_placeholders"] == {"key_hint": "-key"}
+        assert entry.data[CONF_API_KEY] == "new-key"
+        assert entry.options["auto_sort"] is False
+        reload.assert_called_once_with(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {}
         )
         await hass.async_block_till_done()
     assert result["type"] is FlowResultType.CREATE_ENTRY
     validate.assert_awaited_once()
-    assert entry.data[CONF_API_KEY] == "new-key"
     assert CONF_API_KEY not in entry.options
-    # Options are unchanged, so the flow reloads the entry itself.
-    reload.assert_called_once_with(entry.entry_id)
+    assert entry.options["auto_sort"] is False
+    # The final step changes nothing, so no second reload.
+    reload.assert_called_once()
 
 
 async def test_options_flow_blank_key_skips_validation(hass: HomeAssistant) -> None:

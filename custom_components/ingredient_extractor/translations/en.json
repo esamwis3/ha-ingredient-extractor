@@ -58,6 +58,10 @@
           "share_enabled": "Share a recipe link from the Android Home Assistant app and its ingredients are added to the list. You get a notification when it is done.",
           "auto_sort": "After a photo or link is added, order the open items by shop section. You can also sort any time with the ingredient_extractor.sort_list action."
         }
+      },
+      "api_key_valid": {
+        "title": "API key saved",
+        "description": "✅ **The new API key is valid.** Anthropic accepted it and it has been saved (ending …{key_hint}). Your other options were saved too."
       }
     },
     "error": {

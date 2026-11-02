@@ -191,16 +191,18 @@ class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
                     self.hass, provider_key, new_key or entry.data[CONF_API_KEY], model
                 )
             if not errors:
-                if new_key and new_key != entry.data[CONF_API_KEY]:
-                    self.hass.config_entries.async_update_entry(
-                        entry, data={**entry.data, CONF_API_KEY: new_key}
-                    )
-                    # The automatic reload only fires when the options change.
-                    if options == dict(entry.options):
-                        self.hass.config_entries.async_schedule_reload(
-                            entry.entry_id
-                        )
-                return self.async_create_entry(data=options)
+                if not new_key:
+                    return self.async_create_entry(data=options)
+                # Save now, so closing the confirmation still keeps the key.
+                # The automatic reload only fires on the final step's options
+                # change, which this pre-empts, so reload here.
+                self.hass.config_entries.async_update_entry(
+                    entry, data={**entry.data, CONF_API_KEY: new_key}, options=options
+                )
+                self.hass.config_entries.async_schedule_reload(entry.entry_id)
+                self._saved_options = options
+                self._key_hint = new_key[-4:]
+                return await self.async_step_api_key_valid()
             opts = {**opts, **options}
 
         schema = vol.Schema(
@@ -224,3 +226,16 @@ class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+    async def async_step_api_key_valid(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm that the new key was accepted and saved."""
+        if user_input is not None:
+            return self.async_create_entry(data=self._saved_options)
+        return self.async_show_form(
+            step_id="api_key_valid",
+            data_schema=vol.Schema({}),
+            description_placeholders={"key_hint": self._key_hint},
+            last_step=True,
+        )
