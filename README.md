@@ -14,6 +14,8 @@ It is a custom integration plus a dashboard card in one HACS package. The card i
 
 - Reads printed, handwritten or on-screen recipes with a cloud vision model (Anthropic Claude Haiku by default).
 - Also reads plain shopping lists (a whiteboard, fridge door or notepad), one item per line, with or without amounts.
+- Combines duplicates: `500g plain flour` already on the list plus `200g plain flour` becomes `700g plain flour`.
+- Sorts the list by shop section (vegetables, fruit, meat, dairy…), automatically after each recipe or on demand.
 - Uses structured JSON output from the model, not free-text parsing.
 - Images are resized in the browser and processed in memory only — never saved to disk or logged.
 - Adds to any `todo` entity; defaults to the built-in Shopping List (`todo.shopping_list`).
@@ -63,6 +65,7 @@ Most recipe sites publish their ingredients as structured data (schema.org Recip
 | Model | `claude-haiku-5-5` | Any model your key can use; you can type a custom model ID. |
 | Shopping list | `todo.shopping_list` | Any `todo` entity that supports adding items. |
 | Add recipes shared to the Home Assistant app | on | Android only: links shared to the app are added in the background, with a notification. |
+| Sort the list after adding | on | After a photo or link is added, order the open items by shop section. |
 
 Use **Reconfigure** on the integration to change the API key.
 
@@ -74,7 +77,31 @@ Use **Reconfigure** on the integration to change the API key.
 4. Each ingredient is formatted (`500g plain flour`, `2 tbsp olive oil`, `2 onions`) and added with `todo.add_item`.
 5. The image bytes are dropped as soon as the request finishes.
 
-Units are kept as written in the recipe, in short form. When a recipe prints a metric amount alongside an imperial one ("2 lbs (908 g)", "1 cup (240 ml)", "1 can (420 g)"), the metric amount is used; spoon measures and whole items ("2 tsp paprika", "1 red pepper") stay as written. Items already on your list are not merged.
+Units are kept as written in the recipe, in short form. When a recipe prints a metric amount alongside an imperial one ("2 lbs (908 g)", "1 cup (240 ml)", "1 can (420 g)"), the metric amount is used; spoon measures and whole items ("2 tsp paprika", "1 red pepper") stay as written.
+
+### Duplicates
+
+Before adding an item, the integration looks for an open (unticked) entry with the same name, ignoring amounts, case and plurals:
+
+- Amounts in the same unit, or in g/kg or ml/l, are added up: `1kg mince` + `500g mince` → `1.5kg mince`, `1 onion` + `2 onions` → `3 onions`.
+- A bare name adds nothing to an entry with an amount, and the other way round the amount wins: `milk` + `500ml milk` → `500ml milk`; `milk` + `milk` stays one `milk`.
+- Amounts that can't be added up (`2 tbsp olive oil` and `100ml olive oil`) stay as separate items. So do different names (`red onions` and `onions`).
+
+Ticked items are never changed.
+
+### Sorting
+
+Each extracted item comes back with a shop section, in this order: Vegetables, Fruit, Meat, Dairy, Confectionery, Tins of food, Crisps, Alcohol, Medicine, Frozen food, Household, Baking, Bread, Cereal and breakfast, Tea, coffee and hot drinks, then Other.
+
+The action `ingredient_extractor.sort_list` orders the open items by section, keeping the order within a section, with ticked items below. Items typed by hand or added by voice are classified in one small AI call the first time they're seen; every item's section is remembered (in `.storage/ingredient_extractor.categories`), so sorting again costs nothing. A Sort button on a dashboard:
+
+```yaml
+type: button
+icon: mdi:sort-variant
+tap_action:
+  action: perform-action
+  perform_action: ingredient_extractor.sort_list
+```
 
 ## Cost
 

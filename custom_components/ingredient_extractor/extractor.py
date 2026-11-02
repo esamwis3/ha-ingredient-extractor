@@ -8,13 +8,16 @@ import logging
 
 import voluptuous as vol
 
+from homeassistant.components.todo import TodoItemStatus, TodoListEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import EXTRACT_TIMEOUT_SECONDS
 from .fetch import async_fetch_recipe
-from .formatting import format_item
-from .providers.base import Extraction, Provider, ProviderTimeoutError
+from .formatting import format_item, item_key, merge_items
+from .models import IngredientExtractorData
+from .providers.base import Extraction, ProviderError, ProviderTimeoutError
+from .sorting import async_sort_list, get_todo_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,31 +41,84 @@ class TodoAddError(Exception):
 
 async def _async_add_extraction(
     hass: HomeAssistant,
-    todo_entity: str,
+    runtime: IngredientExtractorData,
     extraction: Extraction,
 ) -> list[str]:
-    """Format an extraction and add each item to the todo entity."""
+    """Add each item to the todo list, combining it with an open entry of the same item.
+
+    Returns the text of every entry added or changed, in extraction order.
+    """
     if not extraction.is_recipe:
         raise NotARecipeError
-    items = [s for s in map(format_item, extraction.ingredients) if s]
-    if not items:
+    pairs = [(text, ing) for ing in extraction.ingredients if (text := format_item(ing))]
+    if not pairs:
         raise NoIngredientsError
 
+    # Open entries by item key: (uid or None if added just now, current text).
+    entity = get_todo_entity(hass, runtime.todo_entity)
+    open_items: dict[str, tuple[str | None, str]] = {}
+    for todo in (entity.todo_items or []) if entity else []:
+        if todo.status == TodoItemStatus.NEEDS_ACTION and todo.summary:
+            open_items.setdefault(item_key(todo.summary), (todo.uid, todo.summary))
+
     added: list[str] = []
-    for item in items:
+    for text, ing in pairs:
+        key = item_key(text)
+        if ing.category:
+            runtime.categories.remember(key, ing.category)
+        uid, current = open_items.get(key, (None, None))
+        merged = merge_items(current, text) if current is not None else None
         try:
-            await hass.services.async_call(
-                "todo",
-                "add_item",
-                {"item": item},
-                target={"entity_id": todo_entity},
-                blocking=True,
-            )
+            if merged is None:
+                await _async_call_todo(hass, runtime, "add_item", {"item": text})
+                open_items.setdefault(key, (None, text))
+                added.append(text)
+                continue
+            if merged != current:
+                await _async_call_todo(
+                    hass,
+                    runtime,
+                    "update_item",
+                    {"item": uid or _uid_of(entity, current), "rename": merged},
+                )
+                open_items[key] = (uid, merged)
         except (HomeAssistantError, vol.Invalid) as err:
-            _LOGGER.warning("todo.add_item failed: %s", type(err).__name__)
+            _LOGGER.warning("Updating the todo list failed: %s", type(err).__name__)
             raise TodoAddError(added) from None
-        added.append(item)
+        added = [t for t in added if t != current]
+        added.append(merged)
     return added
+
+
+def _uid_of(entity: TodoListEntity | None, summary: str) -> str:
+    """The uid of the open entry with this text (falls back to the text itself)."""
+    for todo in (entity.todo_items or []) if entity else []:
+        if todo.summary == summary and todo.status == TodoItemStatus.NEEDS_ACTION:
+            return todo.uid or summary
+    return summary
+
+
+async def _async_call_todo(
+    hass: HomeAssistant, runtime: IngredientExtractorData, service: str, data: dict
+) -> None:
+    await hass.services.async_call(
+        "todo", service, data, target={"entity_id": runtime.todo_entity}, blocking=True
+    )
+
+
+async def _async_add_and_sort(
+    hass: HomeAssistant, runtime: IngredientExtractorData, extraction: Extraction
+) -> list[str]:
+    """Add the items, then sort the list if auto-sort is on. A failed sort is not fatal."""
+    items = await _async_add_extraction(hass, runtime, extraction)
+    if runtime.auto_sort:
+        try:
+            await async_sort_list(
+                hass, runtime.provider, runtime.categories, runtime.todo_entity
+            )
+        except (ProviderError, HomeAssistantError) as err:
+            _LOGGER.warning("Sorting the list failed: %s", err)
+    return items
 
 
 async def _async_run_model(call: Awaitable[Extraction]) -> Extraction:
@@ -76,31 +132,29 @@ async def _async_run_model(call: Awaitable[Extraction]) -> Extraction:
 
 async def async_extract_and_add(
     hass: HomeAssistant,
-    provider: Provider,
-    todo_entity: str,
+    runtime: IngredientExtractorData,
     image: bytes,
     mime: str,
-    lock: asyncio.Lock | None = None,
 ) -> list[str]:
     """Extract ingredients from an image and add each to the todo entity."""
-    async with lock or asyncio.Lock():
+    async with runtime.lock:
         extraction = await _async_run_model(
-            provider.async_extract_from_image(image, mime)
+            runtime.provider.async_extract_from_image(image, mime)
         )
-        return await _async_add_extraction(hass, todo_entity, extraction)
+        return await _async_add_and_sort(hass, runtime, extraction)
 
 
 async def async_extract_url_and_add(
     hass: HomeAssistant,
-    provider: Provider,
-    todo_entity: str,
+    runtime: IngredientExtractorData,
     url: str,
-    lock: asyncio.Lock | None = None,
 ) -> tuple[list[str], str | None]:
     """Fetch a recipe link, extract its ingredients and add them; return (items, title)."""
-    async with lock or asyncio.Lock():
+    async with runtime.lock:
         page = await async_fetch_recipe(hass, url)
         if not page.text:
             raise NoIngredientsError
-        extraction = await _async_run_model(provider.async_extract_from_text(page.text))
-        return await _async_add_extraction(hass, todo_entity, extraction), page.title
+        extraction = await _async_run_model(
+            runtime.provider.async_extract_from_text(page.text)
+        )
+        return await _async_add_and_sort(hass, runtime, extraction), page.title

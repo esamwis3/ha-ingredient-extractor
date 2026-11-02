@@ -1,8 +1,16 @@
 """Tests for ingredient formatting."""
 
+from fractions import Fraction
+
 import pytest
 
-from custom_components.ingredient_extractor.formatting import format_item
+from custom_components.ingredient_extractor.formatting import (
+    ParsedItem,
+    format_item,
+    item_key,
+    merge_items,
+    parse_item,
+)
 from custom_components.ingredient_extractor.providers.base import Ingredient
 
 
@@ -74,3 +82,49 @@ def test_prefers_printed_metric(name, qty, unit, mqty, munit, expected):
         name=name, quantity=qty, unit=unit, metric_quantity=mqty, metric_unit=munit
     )
     assert format_item(ing) == expected
+
+
+@pytest.mark.parametrize(
+    ("existing", "new", "expected"),
+    [
+        ("500g plain flour", "200g plain flour", "700g plain flour"),
+        ("1kg mince", "500g mince", "1.5kg mince"),
+        ("2l milk", "500ml milk", "2.5l milk"),
+        ("milk", "500ml milk", "500ml milk"),
+        ("500ml milk", "milk", "500ml milk"),
+        ("milk", "milk", "milk"),
+        ("1 onion", "2 onions", "3 onions"),
+        ("1 lime", "1 lime", "2 limes"),
+        ("2 cloves garlic", "1 clove garlic", "3 cloves garlic"),
+        ("croissants x2", "2 croissants", "4 croissants"),
+        ("1/2 tsp salt", "1/4 tsp salt", "3/4 tsp salt"),
+        ("1 1/2 cups sugar", "1/2 cup sugar", "2 cups sugar"),
+        ("2 tbsp olive oil", "100ml olive oil", None),
+    ],
+)
+def test_merge_items(existing, new, expected) -> None:
+    """Same-unit and metric amounts add up; a bare name adds nothing; mixed units don't merge."""
+    assert merge_items(existing, new) == expected
+
+
+@pytest.mark.parametrize(
+    ("a", "b", "same"),
+    [
+        ("500g Plain Flour", "plain flour", True),
+        ("2 onions", "onion", True),
+        ("tomatoes", "400g tomatoes", True),
+        ("2 red onions", "onions", False),
+        ("1-2 chillies", "1 chilli", False),
+        ("potatoes (bag)", "potatoes", False),
+    ],
+)
+def test_item_key(a, b, same) -> None:
+    """Keys ignore amount, case and plural, but not descriptors."""
+    assert (item_key(a) == item_key(b)) is same
+
+
+def test_parse_item() -> None:
+    """Units are only taken from known unit words."""
+    assert parse_item("2 cloves garlic") == ParsedItem("garlic", Fraction(2), "clove")
+    assert parse_item("2 red onions") == ParsedItem("red onions", Fraction(2))
+    assert parse_item("1-2 chillies") == ParsedItem("1-2 chillies")

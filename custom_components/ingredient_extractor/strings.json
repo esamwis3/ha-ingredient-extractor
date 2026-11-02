@@ -47,14 +47,22 @@
         "data": {
           "model": "Model",
           "todo_entity": "Todo list",
-          "share_enabled": "Add recipes shared to the Home Assistant app"
+          "share_enabled": "Add recipes shared to the Home Assistant app",
+          "auto_sort": "Sort the list after adding"
         },
         "data_description": {
           "model": "Pick a suggested model or type any model ID.",
           "todo_entity": "Extracted ingredients are added to this todo list.",
-          "share_enabled": "Share a recipe link from the Android Home Assistant app and its ingredients are added to the list. You get a notification when it is done."
+          "share_enabled": "Share a recipe link from the Android Home Assistant app and its ingredients are added to the list. You get a notification when it is done.",
+          "auto_sort": "After a photo or link is added, order the open items by shop section. You can also sort any time with the ingredient_extractor.sort_list action."
         }
       }
+    }
+  },
+  "services": {
+    "sort_list": {
+      "name": "Sort shopping list",
+      "description": "Order the open items on the list by shop section. Items not seen before are classified by the AI first."
     }
   }
 }

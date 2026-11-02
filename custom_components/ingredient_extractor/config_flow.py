@@ -27,6 +27,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_MODEL,
     CONF_PROVIDER,
+    CONF_AUTO_SORT,
     CONF_SHARE_ENABLED,
     CONF_TODO_ENTITY,
     DEFAULT_PROVIDER,
@@ -184,6 +185,9 @@ class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
                 ): EntitySelector(EntitySelectorConfig(domain="todo")),
                 vol.Required(
                     CONF_SHARE_ENABLED, default=opts.get(CONF_SHARE_ENABLED, True)
+                ): bool,
+                vol.Required(
+                    CONF_AUTO_SORT, default=opts.get(CONF_AUTO_SORT, True)
                 ): bool,
             }
         )

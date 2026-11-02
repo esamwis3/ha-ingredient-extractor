@@ -18,6 +18,8 @@ class Ingredient:
     #: Metric alternative printed alongside, e.g. "908" "g" for "2 lbs (908 g)".
     metric_quantity: str | None = None
     metric_unit: str | None = None
+    #: Shop section, one of const.CATEGORIES or CATEGORY_OTHER.
+    category: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,3 +80,7 @@ class Provider(ABC):
     @abstractmethod
     async def async_extract_from_text(self, text: str) -> Extraction:
         """Extract ingredients from page text scraped from a web page."""
+
+    @abstractmethod
+    async def async_categorize(self, names: list[str]) -> list[str]:
+        """Return the shop section of each shopping-list item, in the same order."""

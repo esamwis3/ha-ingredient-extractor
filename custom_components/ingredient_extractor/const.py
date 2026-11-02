@@ -10,7 +10,7 @@ CONF_PROVIDER: Final = "provider"
 CONF_MODEL: Final = "model"
 CONF_TODO_ENTITY: Final = "todo_entity"
 CONF_SHARE_ENABLED: Final = "share_enabled"
-CONF_SHARE_ENABLED: Final = "share_enabled"
+CONF_AUTO_SORT: Final = "auto_sort"
 
 DEFAULT_PROVIDER: Final = "anthropic"
 DEFAULT_TODO_ENTITY: Final = "todo.shopping_list"
@@ -37,6 +37,30 @@ FETCH_TIMEOUT_SECONDS: Final = 15
 MAX_PAGE_BYTES: Final = 3 * 1024 * 1024
 MAX_PAGE_TEXT_CHARS: Final = 15_000
 MAX_REDIRECTS: Final = 5
+
+# Shop sections, in the order the list is sorted. Anything else is CATEGORY_OTHER, last.
+CATEGORIES: Final = (
+    "Vegetables",
+    "Fruit",
+    "Meat",
+    "Dairy",
+    "Confectionery",
+    "Tins of food",
+    "Crisps",
+    "Alcohol",
+    "Medicine",
+    "Frozen food",
+    "Household",
+    "Baking",
+    "Bread",
+    "Cereal and breakfast",
+    "Tea, coffee and hot drinks",
+)
+CATEGORY_OTHER: Final = "Other"
+# Remembered item categories (name -> section), oldest dropped first.
+MAX_STORED_CATEGORIES: Final = 2000
+MAX_CATEGORIZE_ITEMS: Final = 100
+SERVICE_SORT_LIST: Final = "sort_list"
 
 # Event fired by the Android Companion app's share sheet.
 EVENT_MOBILE_APP_SHARE: Final = "mobile_app.share"

@@ -6,6 +6,7 @@ import base64
 from functools import partial
 import json
 import logging
+from typing import Any
 
 import anthropic
 
@@ -14,10 +15,14 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from ..const import MAX_INGREDIENTS
 from ..schema import (
+    CATEGORIZE_SCHEMA,
+    CATEGORIZE_SYSTEM_PROMPT,
     INGREDIENTS_SCHEMA,
     SYSTEM_PROMPT,
     TEXT_USER_PROMPT,
     USER_PROMPT,
+    categorize_prompt,
+    parse_categories,
     parse_extraction,
 )
 from .base import (
@@ -92,18 +97,37 @@ class AnthropicProvider(Provider):
         wrapped = TEXT_USER_PROMPT.format(text=text.replace("</recipe_page>", ""))
         return await self._async_extract([{"type": "text", "text": wrapped}], "page")
 
+    async def async_categorize(self, names: list[str]) -> list[str]:
+        """Ask Claude for the shop section of each item."""
+        if not names:
+            return []
+        data = await self._async_structured(
+            CATEGORIZE_SYSTEM_PROMPT,
+            [{"type": "text", "text": categorize_prompt(names)}],
+            CATEGORIZE_SCHEMA,
+            "list",
+        )
+        return parse_categories(data, len(names))
+
     async def _async_extract(self, content: list[dict], what: str) -> Extraction:
-        """Run one structured-output call and validate the answer."""
+        """Run the ingredients call and validate the answer."""
+        data = await self._async_structured(SYSTEM_PROMPT, content, INGREDIENTS_SCHEMA, what)
+        return parse_extraction(data, MAX_INGREDIENTS)
+
+    async def _async_structured(
+        self, system: str, content: list[dict], schema: dict, what: str
+    ) -> Any:
+        """Run one structured-output call and return the decoded JSON."""
         client = await self._async_client()
         try:
             response = await client.messages.create(
                 model=self.model,
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
+                system=system,
                 thinking={"type": "disabled"},
                 output_config={
                     "effort": "low",
-                    "format": {"type": "json_schema", "schema": INGREDIENTS_SCHEMA},
+                    "format": {"type": "json_schema", "schema": schema},
                 },
                 messages=[{"role": "user", "content": content}],
             )
@@ -118,10 +142,9 @@ class AnthropicProvider(Provider):
         if text is None:
             raise ProviderError("The AI returned an unexpected response")
         try:
-            data = json.loads(text)
+            return json.loads(text)
         except json.JSONDecodeError:
             raise ProviderError("The AI returned an unreadable response") from None
-        return parse_extraction(data, MAX_INGREDIENTS)
 
     def _map_error(self, err: anthropic.AnthropicError) -> ProviderError:
         """Convert SDK exceptions to safe messages (never headers, bodies or keys)."""

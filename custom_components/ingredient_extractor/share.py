@@ -64,9 +64,7 @@ async def async_handle_share(hass: HomeAssistant, entry: Any, event: Event) -> N
         return
     runtime = entry.runtime_data
     try:
-        items, title = await async_extract_url_and_add(
-            hass, runtime.provider, runtime.todo_entity, url, runtime.lock
-        )
+        items, title = await async_extract_url_and_add(hass, runtime, url)
         count = f"{len(items)} item{'' if len(items) == 1 else 's'}"
         message = (
             f"Added {count} from {title}" if title else f"Added {count} to your shopping list"

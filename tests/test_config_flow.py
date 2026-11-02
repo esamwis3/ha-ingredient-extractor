@@ -115,7 +115,7 @@ async def test_reconfigure(hass: HomeAssistant) -> None:
 
 
 async def test_options_flow(hass: HomeAssistant) -> None:
-    """Options flow saves model, todo entity and the share switch."""
+    """Options flow saves model, todo entity and the share and sort switches."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_PROVIDER: "anthropic", CONF_API_KEY: "test-key"},
@@ -129,12 +129,15 @@ async def test_options_flow(hass: HomeAssistant) -> None:
         assert result["type"] is FlowResultType.FORM
         share = next(k for k in result["data_schema"].schema if k == "share_enabled")
         assert share.default() is True
+        sort = next(k for k in result["data_schema"].schema if k == "auto_sort")
+        assert sort.default() is True
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
                 CONF_MODEL: "claude-sonnet-5-5",
                 CONF_TODO_ENTITY: "todo.groceries",
                 "share_enabled": False,
+                "auto_sort": False,
             },
         )
         await hass.async_block_till_done()
@@ -143,6 +146,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
         CONF_MODEL: "claude-sonnet-5-5",
         CONF_TODO_ENTITY: "todo.groceries",
         "share_enabled": False,
+        "auto_sort": False,
     }
 
 

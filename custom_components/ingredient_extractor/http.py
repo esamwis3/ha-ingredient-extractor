@@ -195,11 +195,7 @@ class IngredientExtractView(HomeAssistantView):
         _LOGGER.debug("Extracting from a link")
         try:
             items, title = await async_extract_url_and_add(
-                request.app[KEY_HASS],
-                runtime.provider,
-                runtime.todo_entity,
-                url.strip(),
-                runtime.lock,
+                request.app[KEY_HASS], runtime, url.strip()
             )
         except EXTRACT_ERRORS as err:
             return _map_extract_error(err, "page")
@@ -231,14 +227,7 @@ class IngredientExtractView(HomeAssistantView):
             started = time.monotonic()
             _LOGGER.debug("Extracting from %s image, %d bytes", mime, len(image))
             try:
-                items = await async_extract_and_add(
-                    hass,
-                    runtime.provider,
-                    runtime.todo_entity,
-                    image,
-                    mime,
-                    runtime.lock,
-                )
+                items = await async_extract_and_add(hass, runtime, image, mime)
             except EXTRACT_ERRORS as err:
                 return _map_extract_error(err, "image")
             return _success(runtime, items, None, started)
