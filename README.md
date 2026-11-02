@@ -62,12 +62,13 @@ Most recipe sites publish their ingredients as structured data (schema.org Recip
 
 | Option | Default | |
 |---|---|---|
+| API key | (from setup) | Leave blank to keep the current key. A new key is checked with Anthropic before it is saved. |
 | Model | `claude-haiku-5-5` | Any model your key can use; you can type a custom model ID. |
 | Shopping list | `todo.shopping_list` | Any `todo` entity that supports adding items. |
 | Add recipes shared to the Home Assistant app | on | Android only: links shared to the app are added in the background, with a notification. |
 | Sort the list after adding | on | After a photo or link is added, order the open items by shop section. |
 
-Use **Reconfigure** on the integration to change the API key.
+You can also change the API key and model with **Reconfigure**.
 
 ## How it works
 
@@ -112,7 +113,7 @@ With Claude Haiku 5.5 one photo is roughly 2,800 input and 700 output tokens —
 | Card message | Meaning |
 |---|---|
 | That doesn't look like a recipe or shopping list | The model found no recipe or list in the photo. Try a clearer shot of the ingredients list. |
-| The AI provider rejected the API key | Use **Reconfigure** to enter a valid key. |
+| The AI provider rejected the API key | Enter a valid key under **Configure** (or **Reconfigure**). |
 | That image format isn't supported | The browser couldn't convert the photo. Export it as JPEG or PNG. |
 | The AI took too long to respond | The provider timed out (45 s). Try again. |
 | "Configuration error" right after Home Assistant restarts | The page loaded before the integration finished starting, so the card script wasn't included. Refresh the page (in the Companion app: Settings → Companion app → Debugging → Reset frontend cache). |

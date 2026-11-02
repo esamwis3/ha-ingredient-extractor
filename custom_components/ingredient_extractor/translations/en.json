@@ -45,18 +45,26 @@
       "init": {
         "title": "Ingredient Extractor options",
         "data": {
+          "api_key": "API key",
           "model": "Model",
           "todo_entity": "Todo list",
           "share_enabled": "Add recipes shared to the Home Assistant app",
           "auto_sort": "Sort the list after adding"
         },
         "data_description": {
+          "api_key": "Leave blank to keep the current key. A new key is checked with Anthropic before it is saved.",
           "model": "Pick a suggested model or type any model ID.",
           "todo_entity": "Extracted ingredients are added to this todo list.",
           "share_enabled": "Share a recipe link from the Android Home Assistant app and its ingredients are added to the list. You get a notification when it is done.",
           "auto_sort": "After a photo or link is added, order the open items by shop section. You can also sort any time with the ingredient_extractor.sort_list action."
         }
       }
+    },
+    "error": {
+      "invalid_auth": "The API key was rejected. Check it at console.anthropic.com.",
+      "cannot_connect": "Could not reach the AI provider. Check your internet connection and try again.",
+      "invalid_model": "That model was not found for your account.",
+      "unknown": "Unexpected error. Check the Home Assistant log for details."
     }
   },
   "services": {

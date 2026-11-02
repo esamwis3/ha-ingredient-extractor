@@ -13,7 +13,7 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_API_KEY
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -51,6 +51,25 @@ def _model_selector(models: list[str]) -> SelectSelector:
     )
 
 
+async def _async_validate(
+    hass: HomeAssistant, provider_key: str, api_key: str, model: str
+) -> dict[str, str]:
+    """Return form errors (empty when the key and model work)."""
+    provider = get_provider_class(provider_key)(hass, api_key, model)
+    try:
+        await provider.async_validate()
+    except ProviderAuthError:
+        return {"base": "invalid_auth"}
+    except ProviderModelError:
+        return {"base": "invalid_model"}
+    except (ProviderTimeoutError, ProviderError):
+        return {"base": "cannot_connect"}
+    except Exception:
+        _LOGGER.exception("Unexpected error validating credentials")
+        return {"base": "unknown"}
+    return {}
+
+
 class IngredientExtractorConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the config flow."""
 
@@ -60,19 +79,7 @@ class IngredientExtractorConfigFlow(ConfigFlow, domain=DOMAIN):
         self, provider_key: str, api_key: str, model: str
     ) -> dict[str, str]:
         """Return form errors (empty when the key and model work)."""
-        provider = get_provider_class(provider_key)(self.hass, api_key, model)
-        try:
-            await provider.async_validate()
-        except ProviderAuthError:
-            return {"base": "invalid_auth"}
-        except ProviderModelError:
-            return {"base": "invalid_model"}
-        except (ProviderTimeoutError, ProviderError):
-            return {"base": "cannot_connect"}
-        except Exception:
-            _LOGGER.exception("Unexpected error validating credentials")
-            return {"base": "unknown"}
-        return {}
+        return await _async_validate(self.hass, provider_key, api_key, model)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -163,19 +170,44 @@ class IngredientExtractorConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
-    """Edit the model and target todo list."""
+    """Edit the API key, model and target todo list."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show or save options."""
+        entry = self.config_entry
+        provider_key = entry.data[CONF_PROVIDER]
+        provider_cls = get_provider_class(provider_key)
+        opts = entry.options
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            options = dict(user_input)
+            new_key = (options.pop(CONF_API_KEY, None) or "").strip()
+            model = options[CONF_MODEL]
+            # Only call the provider when something it checks has changed.
+            if new_key or model != opts.get(CONF_MODEL):
+                errors = await _async_validate(
+                    self.hass, provider_key, new_key or entry.data[CONF_API_KEY], model
+                )
+            if not errors:
+                if new_key and new_key != entry.data[CONF_API_KEY]:
+                    self.hass.config_entries.async_update_entry(
+                        entry, data={**entry.data, CONF_API_KEY: new_key}
+                    )
+                    # The automatic reload only fires when the options change.
+                    if options == dict(entry.options):
+                        self.hass.config_entries.async_schedule_reload(
+                            entry.entry_id
+                        )
+                return self.async_create_entry(data=options)
+            opts = {**opts, **options}
 
-        provider_cls = get_provider_class(self.config_entry.data[CONF_PROVIDER])
-        opts = self.config_entry.options
         schema = vol.Schema(
             {
+                vol.Optional(CONF_API_KEY): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
                 vol.Required(
                     CONF_MODEL, default=opts.get(CONF_MODEL, provider_cls.default_model)
                 ): _model_selector(provider_cls.suggested_models()),
@@ -191,4 +223,4 @@ class IngredientExtractorOptionsFlow(OptionsFlowWithReload):
                 ): bool,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

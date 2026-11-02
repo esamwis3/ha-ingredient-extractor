@@ -122,7 +122,7 @@ async def test_options_flow(hass: HomeAssistant) -> None:
         options={CONF_MODEL: "claude-haiku-5-5", CONF_TODO_ENTITY: "todo.shopping_list"},
     )
     entry.add_to_hass(hass)
-    with patch(
+    with patch(VALIDATE) as validate, patch(
         "custom_components.ingredient_extractor.async_setup_entry", return_value=True
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -148,6 +148,73 @@ async def test_options_flow(hass: HomeAssistant) -> None:
         "share_enabled": False,
         "auto_sort": False,
     }
+    # The model changed, so it was checked against the existing key.
+    validate.assert_awaited_once()
+    assert entry.data[CONF_API_KEY] == "test-key"
+
+
+def _options_entry(hass: HomeAssistant) -> MockConfigEntry:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_PROVIDER: "anthropic", CONF_API_KEY: "old-key"},
+        options={
+            CONF_MODEL: "claude-haiku-5-5",
+            CONF_TODO_ENTITY: "todo.shopping_list",
+            "share_enabled": True,
+            "auto_sort": True,
+        },
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_options_flow_new_api_key(hass: HomeAssistant) -> None:
+    """A new key is validated, saved to the entry data and kept out of the options."""
+    entry = _options_entry(hass)
+    with patch(VALIDATE) as validate, patch(
+        "custom_components.ingredient_extractor.async_setup_entry", return_value=True
+    ), patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {CONF_API_KEY: " new-key ", **entry.options}
+        )
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    validate.assert_awaited_once()
+    assert entry.data[CONF_API_KEY] == "new-key"
+    assert CONF_API_KEY not in entry.options
+    # Options are unchanged, so the flow reloads the entry itself.
+    reload.assert_called_once_with(entry.entry_id)
+
+
+async def test_options_flow_blank_key_skips_validation(hass: HomeAssistant) -> None:
+    """Saving with no new key and the same model does not call the provider."""
+    entry = _options_entry(hass)
+    with patch(VALIDATE) as validate, patch(
+        "custom_components.ingredient_extractor.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {**entry.options, "auto_sort": False}
+        )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    validate.assert_not_called()
+    assert entry.data[CONF_API_KEY] == "old-key"
+
+
+async def test_options_flow_rejects_bad_key(hass: HomeAssistant) -> None:
+    """A rejected key shows an error and nothing is saved."""
+    entry = _options_entry(hass)
+    with patch(VALIDATE, side_effect=ProviderAuthError("nope")):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {**entry.options, CONF_API_KEY: "bad-key", "auto_sort": False},
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data[CONF_API_KEY] == "old-key"
+    assert entry.options["auto_sort"] is True
 
 
 def test_provider_metadata() -> None:
