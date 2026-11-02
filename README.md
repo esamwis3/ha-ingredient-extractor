@@ -47,7 +47,7 @@ On a phone or tablet the card shows **Take photo** and **Choose photo** (your ph
 
 ### Floating button layout
 
-`layout: fab` keeps the dashboard free for the list itself: the card shows a floating **+ Recipe** button (bottom right, above a floating navbar) that opens a bottom sheet with Take photo, Choose photo and the link field. Success closes the sheet and shows a toast. Place the card **after** your list — in this layout it only adds a small spacer so the last item isn't hidden under the button. Options: `fab_label` (default `Recipe`), `fab_bottom` (default `108px`).
+`layout: fab` keeps the dashboard free for the list itself: the card shows a floating **+ Recipe** button (bottom right, above a floating navbar) that opens a bottom sheet with Take photo, Choose photo and the link field. Success closes the sheet and shows a toast. Place the card **after** your list — in this layout it only adds a small spacer so the last item isn't hidden under the button. Options: `fab_label` (default `Recipe`), `fab_bottom` (default `108px`), `fab_right` (default `16px`). Both offsets are added to the safe-area inset Home Assistant reports (the same one navbar-card uses), so the button stays put relative to a floating navbar in the iPhone and Android apps.
 
 ### Recipe links
 

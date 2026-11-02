@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.4.0';
+const IE_VERSION = '0.4.1';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -124,8 +124,9 @@ const IE_FAB_STYLE = `
   [hidden] { display: none !important; }
   .fab {
     position: fixed; z-index: 50; box-sizing: border-box; height: 56px; padding: 0 22px 0 16px;
-    right: calc(16px + env(safe-area-inset-right, 0px));
-    bottom: calc(var(--ie-fab-bottom, 108px) + env(safe-area-inset-bottom, 0px));
+    /* HA's --safe-area-inset-* (what navbar-card uses) first, so the button moves with the bar. */
+    right: calc(var(--ie-fab-right, 16px) + var(--safe-area-inset-right, env(safe-area-inset-right, 0px)));
+    bottom: calc(var(--ie-fab-bottom, 108px) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
     display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 28px;
     font: inherit; font-size: 1rem; font-weight: 500; cursor: pointer;
     color: var(--text-primary-color, #fff); background: var(--primary-color, #03a9f4);
@@ -144,7 +145,7 @@ const IE_FAB_STYLE = `
   .sheet {
     position: relative; box-sizing: border-box; width: 100%; max-width: 560px;
     max-height: 90vh; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain;
-    padding-bottom: env(safe-area-inset-bottom, 0px); outline: none;
+    padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); outline: none;
     color: var(--primary-text-color); background: var(--card-background-color, #1d1d1d);
     border-radius: 24px 24px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, .4);
     animation: ie-up .24s cubic-bezier(.2, .8, .2, 1);
@@ -296,6 +297,10 @@ class IngredientExtractorCard extends HTMLElement {
         || (window.CSS && CSS.supports && !CSS.supports('bottom', config.fab_bottom)))) {
       throw new Error('"fab_bottom" must be a CSS length, e.g. 108px');
     }
+    if (config && config.fab_right != null && (typeof config.fab_right !== 'string'
+        || (window.CSS && CSS.supports && !CSS.supports('right', config.fab_right)))) {
+      throw new Error('"fab_right" must be a CSS length, e.g. 16px');
+    }
     this._teardownPortal();
     this._config = {
       title: 'Recipe to shopping list', camera: 'auto', android_camera: 'viewfinder', ...(config || {}),
@@ -303,6 +308,7 @@ class IngredientExtractorCard extends HTMLElement {
     this._config.layout = (config && config.layout) || 'inline';
     this._config.fab_label = (config && config.fab_label) || 'Recipe';
     this._config.fab_bottom = (config && config.fab_bottom) || '108px';
+    this._config.fab_right = (config && config.fab_right) || '16px';
     this._setState('idle');
     if (this.isConnected) this._buildPortal();
   }
@@ -369,6 +375,7 @@ class IngredientExtractorCard extends HTMLElement {
       el('ha-icon', { icon: 'mdi:plus' }), el('span', { text: this._config.fab_label }),
     ]);
     fab.style.setProperty('--ie-fab-bottom', this._config.fab_bottom);
+    fab.style.setProperty('--ie-fab-right', this._config.fab_right);
     fab.addEventListener('click', () => this._openSheet());
 
     const handle = el('button', { class: 'handle', type: 'button', 'aria-label': 'Close' },
