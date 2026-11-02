@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.4.1';
+const IE_VERSION = '0.4.2';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -153,13 +153,17 @@ const IE_FAB_STYLE = `
   @keyframes ie-up { from { transform: translateY(100%); } }
   @keyframes ie-fade { from { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .sheet, .backdrop { animation: none; } }
-  .handle {
-    display: flex; align-items: center; justify-content: center; width: 100%; height: 44px;
-    padding: 0; border: 0; background: none; cursor: pointer;
+  .head { display: flex; align-items: center; gap: 8px; padding: 12px 8px 8px 16px; }
+  .sheet h2 { flex: 1; margin: 0; font-size: 1.25rem; font-weight: 500; }
+  .close {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+    color: var(--secondary-text-color, #9b9b9b); background: none;
   }
-  .handle .bar { width: 40px; height: 4px; border-radius: 2px; background: var(--secondary-text-color, #9b9b9b); opacity: .5; }
-  .handle:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -4px; border-radius: 12px; }
-  .sheet h2 { margin: 0 16px 12px; font-size: 1.25rem; font-weight: 500; }
+  .close:hover { background: rgba(127, 127, 127, .15); }
+  .close:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+  .close:disabled { opacity: .35; cursor: default; }
+  .close ha-icon { --mdc-icon-size: 24px; }
   .sheet .tiles.one { grid-template-columns: 1fr; }
   .sheet .tiles .dropzone,
   .sheet .tiles .dropzone:hover,
@@ -378,13 +382,15 @@ class IngredientExtractorCard extends HTMLElement {
     fab.style.setProperty('--ie-fab-right', this._config.fab_right);
     fab.addEventListener('click', () => this._openSheet());
 
-    const handle = el('button', { class: 'handle', type: 'button', 'aria-label': 'Close' },
-      [el('span', { class: 'bar' })]);
-    handle.addEventListener('click', () => this._closeSheet());
+    // A plain close button rather than a drag handle: the sheet can't be swiped, and a bar
+    // at the bottom of a phone screen reads as the system's own navigation bar.
+    const close = el('button', { class: 'close', type: 'button', 'aria-label': 'Close' },
+      [el('ha-icon', { icon: 'mdi:close' })]);
+    close.addEventListener('click', () => this._closeSheet());
     const body = el('div', { class: 'body' });
     const sheet = el('div', {
       class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ie-title', tabindex: '-1',
-    }, [handle, el('h2', { id: 'ie-title', text: 'Add a recipe' }), body]);
+    }, [el('div', { class: 'head' }, [el('h2', { id: 'ie-title', text: 'Add a recipe' }), close]), body]);
     const backdrop = el('div', { class: 'backdrop' });
     backdrop.addEventListener('click', () => this._closeSheet());
     const layer = el('div', { class: 'layer' }, [backdrop, sheet]);
@@ -398,6 +404,7 @@ class IngredientExtractorCard extends HTMLElement {
     this._layer = layer;
     this._sheet = sheet;
     this._sheetBody = body;
+    this._closeBtn = close;
     this._open = false;
     this._render();
   }
@@ -406,7 +413,7 @@ class IngredientExtractorCard extends HTMLElement {
     if (this._open) this._unlockOpen();
     this._stopCamera();
     if (this._portal) this._portal.remove();
-    this._portal = this._portalRoot = this._fabBtn = this._layer = this._sheet = this._sheetBody = null;
+    this._portal = this._portalRoot = this._fabBtn = this._layer = this._sheet = this._sheetBody = this._closeBtn = null;
     this._open = false;
     if (this._state !== 'working') this._state = 'idle'; // don't resurrect a stale sheet view
   }
@@ -652,6 +659,7 @@ class IngredientExtractorCard extends HTMLElement {
         el('style', { text: IE_SPACER_STYLE }), el('div', { class: 'spacer', 'aria-hidden': 'true' }),
       );
       if (!this._sheetBody) return;
+      this._closeBtn.disabled = this._state === 'working'; // closing is ignored mid-request anyway
       this._sheetBody.replaceChildren(this._renderState());
       // The view that had focus was just replaced; keep focus inside the open sheet.
       if (this._open && !this._portalRoot.activeElement) this._sheet.focus({ preventScroll: true });
