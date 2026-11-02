@@ -1,6 +1,6 @@
 /* Ingredient Extractor card: photo of a recipe -> items on the shopping list.
  * Single vanilla JS file, no build step, no imports. */
-const IE_VERSION = '0.3.0';
+const IE_VERSION = '0.3.1';
 const IE_ENDPOINT = '/api/ingredient_extractor/extract';
 const IE_TIMEOUT_MS = 60000;
 const IE_MAX_BYTES = 4 * 1024 * 1024; // keep under the backend's 5 MB limit
@@ -10,7 +10,7 @@ const IE_MESSAGES = {
   no_image: 'No image was received.',
   too_large: 'That image is too large. Try a smaller photo.',
   unsupported_type: "That image format isn't supported. Try a JPEG or PNG.",
-  not_a_recipe: "That doesn't look like a recipe. Try a photo of the ingredients list.",
+  not_a_recipe: "That doesn't look like a recipe or shopping list. Try a photo of the ingredients or the list.",
   no_ingredients: 'No ingredients were found in that photo.',
   provider_auth: 'The AI provider rejected the API key. Check the integration settings.',
   provider_error: 'The AI service had a problem. Please try again.',

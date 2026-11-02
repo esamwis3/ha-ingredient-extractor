@@ -94,7 +94,7 @@ def describe_extract_error(
 ) -> tuple[HTTPStatus, str, str] | None:
     """Map an extraction failure to (status, code, user-safe message)."""
     if isinstance(err, NotARecipeError):
-        return HTTPStatus.UNPROCESSABLE_ENTITY, ERR_NOT_A_RECIPE, "That doesn't look like a recipe"
+        return HTTPStatus.UNPROCESSABLE_ENTITY, ERR_NOT_A_RECIPE, "That doesn't look like a recipe or shopping list"
     if isinstance(err, NoIngredientsError):
         return (
             HTTPStatus.UNPROCESSABLE_ENTITY,

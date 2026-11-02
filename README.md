@@ -13,6 +13,7 @@ salt and pepper
 It is a custom integration plus a dashboard card in one HACS package. The card is loaded automatically, so there is no Lovelace resource to add.
 
 - Reads printed, handwritten or on-screen recipes with a cloud vision model (Anthropic Claude Haiku by default).
+- Also reads plain shopping lists (a whiteboard, fridge door or notepad), one item per line, with or without amounts.
 - Uses structured JSON output from the model, not free-text parsing.
 - Images are resized in the browser and processed in memory only — never saved to disk or logged.
 - Adds to any `todo` entity; defaults to the built-in Shopping List (`todo.shopping_list`).
@@ -83,7 +84,7 @@ With Claude Haiku 5.5 one photo is roughly 2,800 input and 700 output tokens —
 
 | Card message | Meaning |
 |---|---|
-| That doesn't look like a recipe | The model found no recipe in the photo. Try a clearer shot of the ingredients list. |
+| That doesn't look like a recipe or shopping list | The model found no recipe or list in the photo. Try a clearer shot of the ingredients list. |
 | The AI provider rejected the API key | Use **Reconfigure** to enter a valid key. |
 | That image format isn't supported | The browser couldn't convert the photo. Export it as JPEG or PNG. |
 | The AI took too long to respond | The provider timed out (45 s). Try again. |
